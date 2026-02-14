@@ -137,7 +137,7 @@
 ### Task 8: Heartbeat Integration (NEW - Already Exists!)
 - [x] Cron job configured: every 15 min ✅
 - [ ] Add task polling from Convex
-- [ ] Add HEARTBEAT.md file with checklist
+- [x] Add HEARTBEAT.md file with checklist ✅
 - [ ] Agent picks next available task
 - [ ] Updates task status on pickup
 
@@ -175,10 +175,10 @@
 ---
 
 ### Task 11: Shared Context (AGENTS.md) (NEW)
-- [ ] Create AGENTS.md in workspace
-- [ ] Document tool access permissions
-- [ ] Document memory file locations
-- [ ] Document communication protocols
+- [x] Create AGENTS.md in workspace ✅
+- [x] Document tool access permissions ✅
+- [x] Document memory file locations ✅
+- [x] Document communication protocols ✅
 
 **Testing Plan:**
 - [ ] Test: Agent reads AGENTS.md on startup
