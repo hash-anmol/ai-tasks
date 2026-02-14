@@ -14,34 +14,22 @@
 
 ---
 
-## 🚨 PRIORITY TASKS (Build in Order)
+## 🚨 PRIORITY TASKS - Requires Local Setup
+
+> ⚠️ **Note:** The following tasks require running `npx convex dev` locally. They cannot be done remotely.
 
 ### Task 1: Set Up Convex Database (HIGH PRIORITY)
 - [ ] Run `npx convex dev` to set up Convex project
 - [ ] Create schema for tasks with AI fields
 - [ ] Add Convex provider to Next.js app
 - [ ] Migrate from localStorage to Convex
-- [ ] Test CRUD operations
 - [ ] Deploy with `npx convex deploy`
 
-**Testing Plan:**
-- [ ] Test: Create task via UI → appears in Convex dashboard
-- [ ] Test: Update task → reflects in real-time
-- [ ] Test: Delete task → removed from DB
-- [ ] Test: Refresh page → data persists
-
----
-
-### Task 2: OpenClaw Webhook Integration (HIGH PRIORITY)
-- [x] Create webhook endpoint `/api/webhook/openclaw` ✅
-- [x] Receive task updates from OpenClaw ✅
-- [ ] Store OpenClaw task IDs and status (needs Convex)
+### Task 2: OpenClaw Webhook Integration
+- [x] Create webhook endpoint ✅
+- [x] Receive task updates ✅
+- [ ] Store in Convex (needs Task 1)
 - [ ] Display webhook status in UI
-
-**Testing Plan:**
-- [ ] Test: Send POST to webhook → task updates in DB
-- [ ] Test: Invalid payload → returns 400 error
-- [ ] Test: Webhook down → graceful error handling
 
 ---
 
