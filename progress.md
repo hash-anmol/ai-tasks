@@ -200,9 +200,9 @@
 ---
 
 ### Task 13: Daily Standup Generator (NEW)
-- [ ] Create standup query (completed/in_progress/blocked)
+- [x] Create standup query (completed/in_progress/blocked) ✅
 - [ ] Add cron for daily standup (11:30 PM IST)
-- [ ] Format as Telegram-ready message
+- [x] Format as Telegram-ready message ✅
 - [ ] Send to Telegram channel
 
 **Testing Plan:**
