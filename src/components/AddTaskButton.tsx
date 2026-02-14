@@ -11,9 +11,17 @@ interface Task {
   dueDate?: string;
   tags: string[];
   isAI: boolean;
+  agent?: "researcher" | "writer" | "editor" | "coordinator";
   createdAt: string;
   updatedAt: string;
 }
+
+const AGENTS = [
+  { id: "researcher", name: "Researcher", emoji: "🔍", color: "bg-blue-500" },
+  { id: "writer", name: "Writer", emoji: "✍️", color: "bg-purple-500" },
+  { id: "editor", name: "Editor", emoji: "📝", color: "bg-orange-500" },
+  { id: "coordinator", name: "Coordinator", emoji: "🎯", color: "bg-green-500" },
+];
 
 export default function AddTaskButton() {
   const [isOpen, setIsOpen] = useState(false);
@@ -22,6 +30,7 @@ export default function AddTaskButton() {
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
   const [isAI, setIsAI] = useState(false);
+  const [agent, setAgent] = useState<Task["agent"]>(undefined);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,27 +46,24 @@ export default function AddTaskButton() {
       dueDate: dueDate || undefined,
       tags: [],
       isAI,
+      agent: isAI ? agent : undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    // Get existing tasks from localStorage
     const stored = localStorage.getItem("ai-tasks");
     const tasks: Task[] = stored ? JSON.parse(stored) : [];
-    
-    // Add new task
     tasks.push(newTask);
     localStorage.setItem("ai-tasks", JSON.stringify(tasks));
 
-    // Reset form
     setTitle("");
     setDescription("");
     setDueDate("");
     setPriority("medium");
     setIsAI(false);
+    setAgent(undefined);
     setIsOpen(false);
 
-    // Reload the page to show new task
     window.location.reload();
   };
 
@@ -70,7 +76,6 @@ export default function AddTaskButton() {
         <span className="material-icons text-3xl font-bold">add</span>
       </button>
 
-      {/* Add Task Modal */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
@@ -103,7 +108,7 @@ export default function AddTaskButton() {
                 </label>
                 <textarea
                   placeholder="Add more details..."
-                  rows={3}
+                  rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:border-primary focus:outline-none resize-none"
@@ -154,6 +159,31 @@ export default function AddTaskButton() {
                   Assign to AI Agent
                 </label>
               </div>
+
+              {isAI && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Select Agent
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {AGENTS.map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => setAgent(a.id as Task["agent"])}
+                        className={`p-3 rounded-lg border-2 flex items-center gap-2 transition-colors ${
+                          agent === a.id
+                            ? "border-primary bg-primary/10"
+                            : "border-slate-200 hover:border-slate-300"
+                        }`}
+                      >
+                        <span>{a.emoji}</span>
+                        <span className="text-sm font-medium">{a.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <button
                 type="submit"

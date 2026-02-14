@@ -13,6 +13,7 @@ interface Task {
   dueDate?: string;
   tags: string[];
   isAI: boolean;
+  agent?: "researcher" | "writer" | "editor" | "coordinator";
   aiProgress?: number;
   aiNotes?: string;
   aiStatus?: "assigned" | "working" | "completed";
@@ -20,6 +21,15 @@ interface Task {
   createdAt: string;
   updatedAt: string;
 }
+
+const AGENTS = [
+  { id: "researcher", name: "Researcher", emoji: "🔍", color: "bg-blue-500" },
+  { id: "writer", name: "Writer", emoji: "✍️", color: "bg-purple-500" },
+  { id: "editor", name: "Editor", emoji: "📝", color: "bg-orange-500" },
+  { id: "coordinator", name: "Coordinator", emoji: "🎯", color: "bg-green-500" },
+];
+
+const getAgentInfo = (agentId?: string) => AGENTS.find(a => a.id === agentId);
 
 const initialTasks: Task[] = [
   {
@@ -29,6 +39,7 @@ const initialTasks: Task[] = [
     priority: "high",
     tags: ["AI"],
     isAI: true,
+    agent: "researcher",
     aiProgress: 100,
     aiNotes: "Completed analysis of design specifications. All items approved.",
     aiStatus: "completed",
@@ -52,6 +63,7 @@ const initialTasks: Task[] = [
     status: "in_progress",
     tags: ["AI"],
     isAI: true,
+    agent: "coordinator",
     aiProgress: 65,
     aiNotes: "Analyzing requirements and creating milestone structure...",
     aiStatus: "working",
@@ -197,11 +209,18 @@ function TaskListContent() {
                     <div className="flex-grow">
                       <div className="flex items-center justify-between">
                         <h3 className="font-semibold text-slate-800 text-[15px]">{task.title}</h3>
-                        {task.isAI && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary text-slate-900 uppercase tracking-wide">
-                            AI
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {task.agent && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${getAgentInfo(task.agent)?.color || 'bg-slate-500'} text-white uppercase tracking-wide`}>
+                              {getAgentInfo(task.agent)?.emoji} {getAgentInfo(task.agent)?.name}
+                            </span>
+                          )}
+                          {task.isAI && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary text-slate-900 uppercase tracking-wide">
+                              AI
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {task.isAI && task.aiProgress !== undefined && (
                         <div className="mt-2">
