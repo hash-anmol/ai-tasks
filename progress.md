@@ -81,12 +81,12 @@
 ---
 
 ### Task 6: Agent SOUL System (NEW)
-- [ ] Create `agents/` folder in workspace
-- [ ] Create `SOUL.md` template for research agent
-- [ ] Create `SOUL.md` for writer agent
-- [ ] Create `SOUL.md` for editor agent
-- [ ] Create `SOUL.md` for coordinator agent
-- [ ] Add AGENTS.md with operating instructions
+- [x] Create `agents/` folder in workspace ✅
+- [x] Create `SOUL.md` template for research agent ✅
+- [x] Create `SOUL.md` for writer agent ✅
+- [x] Create `SOUL.md` for editor agent ✅
+- [x] Create `SOUL.md` for coordinator agent ✅
+- [x] Add AGENTS.md with operating instructions ✅
 
 **SOUL Template:**
 ```markdown
