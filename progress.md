@@ -29,7 +29,7 @@
 - [x] Create webhook endpoint ✅
 - [x] Receive task updates ✅
 - [ ] Store in Convex (needs Task 1)
-- [ ] Display webhook status in UI
+- [x] Display webhook status in UI ✅
 
 ---
 
