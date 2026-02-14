@@ -24,7 +24,7 @@
 - [ ] Deploy with `npx convex deploy`
 
 ### Task 2: OpenClaw Webhook Integration (HIGH PRIORITY)
-- [ ] Create webhook endpoint `/api/webhook/openclaw`
+- [x] Create webhook endpoint `/api/webhook/openclaw` ✅
 - [ ] Receive task updates from OpenClaw
 - [ ] Store OpenClaw task IDs and status
 - [ ] Display webhook status in UI
