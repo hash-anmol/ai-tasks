@@ -298,6 +298,16 @@ function TaskListContent({ agentFilter = "all" }: TaskListProps) {
                           </span>
                         </div>
                       )}
+                      {task.isAI && task.aiStatus === 'working' && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="flex gap-0.5">
+                            <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                            <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                            <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                          </div>
+                          <span className="text-xs text-primary">AI thinking...</span>
+                        </div>
+                      )}
                       {task.isAI && task.aiNotes && (
                         <div className="mt-2 p-2 bg-slate-50 rounded-lg">
                           <p className="text-xs text-slate-600 italic">"{task.aiNotes}"</p>

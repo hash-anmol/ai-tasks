@@ -171,6 +171,17 @@ export default function KanbanBoard() {
                   </div>
                 )}
                 
+                {task.isAI && task.aiStatus === 'working' && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="flex gap-0.5">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    </div>
+                    <span className="text-xs text-primary">AI thinking</span>
+                  </div>
+                )}
+                
                 <div className="flex items-center gap-2 mt-2">
                   {task.priority && (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${
