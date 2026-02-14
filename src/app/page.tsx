@@ -3,11 +3,12 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import TaskList from "@/components/TaskList";
+import KanbanBoard from "@/components/KanbanBoard";
 import AddTaskButton from "@/components/AddTaskButton";
 import GamificationHeader from "@/components/GamificationHeader";
 import BottomNav from "@/components/BottomNav";
 
-function TabNavigation() {
+function TabNavigation({ view, setView }: { view: string; setView: (v: string) => void }) {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState("today");
 
@@ -30,20 +31,38 @@ function TabNavigation() {
   };
 
   return (
-    <div className="flex overflow-x-auto hide-scrollbar px-6 space-x-6 mt-4">
-      {tabs.map((tab) => (
+    <div className="flex items-center justify-between">
+      <div className="flex overflow-x-auto hide-scrollbar px-6 space-x-6 mt-4">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => handleTabClick(tab.id)}
+            className={`pb-3 border-b-2 whitespace-nowrap text-sm font-medium transition-colors ${
+              activeTab === tab.id
+                ? "border-primary text-primary"
+                : "border-transparent text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-1 px-4">
         <button
-          key={tab.id}
-          onClick={() => handleTabClick(tab.id)}
-          className={`pb-3 border-b-2 whitespace-nowrap text-sm font-medium transition-colors ${
-            activeTab === tab.id
-              ? "border-primary text-primary"
-              : "border-transparent text-slate-400 hover:text-slate-600"
-          }`}
+          onClick={() => setView("list")}
+          className={`p-2 rounded-lg ${view === "list" ? "bg-primary text-slate-900" : "text-slate-400"}`}
+          title="List View"
         >
-          {tab.label}
+          <span className="material-icons text-sm">view_list</span>
         </button>
-      ))}
+        <button
+          onClick={() => setView("kanban")}
+          className={`p-2 rounded-lg ${view === "kanban" ? "bg-primary text-slate-900" : "text-slate-400"}`}
+          title="Kanban View"
+        >
+          <span className="material-icons text-sm">view_kanban</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -51,6 +70,7 @@ function TabNavigation() {
 function PageContent() {
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab") || "today";
+  const [view, setView] = useState("list");
 
   const getTitle = () => {
     switch (activeTab) {
@@ -70,10 +90,10 @@ function PageContent() {
           <h1 className="text-2xl font-bold tracking-tight">{getTitle()}</h1>
           <p className="text-sm text-slate-500 mt-1">Your tasks</p>
         </div>
-        <TabNavigation />
+        <TabNavigation view={view} setView={setView} />
       </header>
       <main className="px-5 py-6 space-y-4 pb-32">
-        <TaskList />
+        {view === "kanban" ? <KanbanBoard /> : <TaskList />}
       </main>
       <AddTaskButton />
       <BottomNav />
