@@ -1,21 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 interface Task {
   _id: string;
   title: string;
   description?: string;
-  status: "pending" | "in_progress" | "done";
-  priority?: "low" | "medium" | "high";
+  status: string;
+  priority?: string;
   dueDate?: string;
   tags: string[];
   isAI: boolean;
-  agent?: "researcher" | "writer" | "editor" | "coordinator";
+  agent?: string;
   dependsOn?: string[];
-  comments?: string[];
-  createdAt: string;
-  updatedAt: string;
+  aiStatus?: string;
+  aiProgress?: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
 const AGENTS = [
@@ -30,55 +33,68 @@ export default function AddTaskButton() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
+  const [priority, setPriority] = useState<string>("medium");
   const [isAI, setIsAI] = useState(false);
-  const [agent, setAgent] = useState<Task["agent"]>(undefined);
+  const [agent, setAgent] = useState<string | undefined>(undefined);
   const [dependsOn, setDependsOn] = useState<string[]>([]);
-  const [existingTasks, setExistingTasks] = useState<Task[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("ai-tasks");
-    if (stored) {
-      const tasks = JSON.parse(stored);
-      setExistingTasks(tasks.filter((t: Task) => t.status !== "done"));
-    }
-  }, [isOpen]);
+  // Get tasks from Convex
+  const tasks = useQuery(api.tasks.getTasks) || [];
+  const createTask = useMutation(api.tasks.createTask);
+  const existingTasks = tasks.filter((t: Task) => t.status !== "done");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!title.trim()) return;
+    if (!title.trim() || isSubmitting) return;
 
-    const newTask: Task = {
-      _id: Date.now().toString(),
-      title: title.trim(),
-      description: description.trim() || undefined,
-      status: "pending",
-      priority,
-      dueDate: dueDate || undefined,
-      tags: [],
-      isAI,
-      agent: isAI ? agent : undefined,
-      dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    setIsSubmitting(true);
 
-    const stored = localStorage.getItem("ai-tasks");
-    const tasks: Task[] = stored ? JSON.parse(stored) : [];
-    tasks.push(newTask);
-    localStorage.setItem("ai-tasks", JSON.stringify(tasks));
+    try {
+      // Create task in Convex
+      await createTask({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        status: "pending",
+        priority,
+        dueDate: dueDate ? new Date(dueDate).getTime() : undefined,
+        tags: [],
+        isAI,
+        agent: isAI ? agent : undefined,
+        dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
+      });
 
-    setTitle("");
-    setDescription("");
-    setDueDate("");
-    setPriority("medium");
-    setIsAI(false);
-    setAgent(undefined);
-    setDependsOn([]);
-    setIsOpen(false);
+      // If AI task and scheduled for now, execute via OpenClaw
+      if (isAI) {
+        try {
+          await fetch("/api/openclaw/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: title.trim(),
+              description: description.trim(),
+              agent,
+            }),
+          });
+        } catch (err) {
+          console.log("OpenClaw execution (will work when reachable):", err);
+        }
+      }
 
-    window.location.reload();
+      setTitle("");
+      setDescription("");
+      setDueDate("");
+      setPriority("medium");
+      setIsAI(false);
+      setAgent(undefined);
+      setDependsOn([]);
+      setIsOpen(false);
+    } catch (err) {
+      console.error("Error creating task:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const toggleDependency = (taskId: string) => {
@@ -99,64 +115,59 @@ export default function AddTaskButton() {
       </button>
 
       {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          onClick={() => setIsOpen(false)}
-        >
-          <div
-            className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl max-h-[90vh] overflow-y-auto"
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-end sm:items-center justify-center">
+          <div 
+            className="bg-white w-full sm:max-w-lg max-h-[90vh] rounded-t-3xl sm:rounded-3xl p-6 overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-xl font-bold mb-4">Add New Task</h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold">New Task</h2>
+              <button 
+                onClick={() => setIsOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"
+              >
+                <span className="material-icons text-sm">close</span>
+              </button>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Task Title
-                </label>
                 <input
                   type="text"
-                  placeholder="What needs to be done?"
+                  placeholder="Task title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:border-primary focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:outline-none"
                   autoFocus
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Description (optional)
-                </label>
                 <textarea
-                  placeholder="Add more details..."
-                  rows={2}
+                  placeholder="Description (optional)"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:border-primary focus:outline-none resize-none"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:outline-none resize-none"
+                  rows={3}
                 />
               </div>
 
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Due Date
-                  </label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Due Date</label>
                   <input
-                    type="time"
+                    type="datetime-local"
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:border-primary focus:outline-none"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-primary focus:outline-none text-sm"
                   />
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Priority
-                  </label>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Priority</label>
                   <select
                     value={priority}
-                    onChange={(e) => setPriority(e.target.value as "low" | "medium" | "high")}
-                    className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:border-primary focus:outline-none"
+                    onChange={(e) => setPriority(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-primary focus:outline-none text-sm"
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -165,68 +176,53 @@ export default function AddTaskButton() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
-                <input
-                  type="checkbox"
-                  id="aiTask"
-                  checked={isAI}
-                  onChange={(e) => setIsAI(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
-                />
-                <label
-                  htmlFor="aiTask"
-                  className="text-sm text-slate-700 flex items-center gap-2 cursor-pointer"
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAI(!isAI)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+                    isAI 
+                      ? "border-primary bg-primary/10 text-primary" 
+                      : "border-slate-200 text-slate-600"
+                  }`}
                 >
-                  <span className="material-icons text-primary text-sm">auto_awesome</span>
-                  Assign to AI Agent
-                </label>
-              </div>
+                  <span className="material-icons text-sm">smart_toy</span>
+                  <span className="text-sm font-medium">AI Task</span>
+                </button>
 
-              {isAI && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Select Agent
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
+                {isAI && (
+                  <select
+                    value={agent || ""}
+                    onChange={(e) => setAgent(e.target.value || undefined)}
+                    className="flex-1 px-3 py-2 rounded-lg border border-slate-200 focus:border-primary focus:outline-none text-sm"
+                  >
+                    <option value="">Select Agent</option>
                     {AGENTS.map((a) => (
-                      <button
-                        key={a.id}
-                        type="button"
-                        onClick={() => setAgent(a.id as Task["agent"])}
-                        className={`p-3 rounded-lg border-2 flex items-center gap-2 transition-colors ${
-                          agent === a.id
-                            ? "border-primary bg-primary/10"
-                            : "border-slate-200 hover:border-slate-300"
-                        }`}
-                      >
-                        <span>{a.emoji}</span>
-                        <span className="text-sm font-medium">{a.name}</span>
-                      </button>
+                      <option key={a.id} value={a.id}>
+                        {a.emoji} {a.name}
+                      </option>
                     ))}
-                  </div>
-                </div>
-              )}
+                  </select>
+                )}
+              </div>
 
               {existingTasks.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Depends on (optional)
-                  </label>
-                  <p className="text-xs text-slate-500 mb-2">This task will be blocked until selected tasks are done</p>
-                  <div className="space-y-2 max-h-32 overflow-y-auto">
-                    {existingTasks.map((task) => (
-                      <label
+                  <label className="block text-xs font-medium text-slate-500 mb-2">Depends on (optional)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {existingTasks.map((task: Task) => (
+                      <button
                         key={task._id}
-                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 cursor-pointer"
+                        type="button"
+                        onClick={() => toggleDependency(task._id)}
+                        className={`px-3 py-1 rounded-full text-xs transition-colors ${
+                          dependsOn.includes(task._id)
+                            ? "bg-primary text-slate-900"
+                            : "bg-slate-100 text-slate-600"
+                        }`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={dependsOn.includes(task._id)}
-                          onChange={() => toggleDependency(task._id)}
-                          className="w-4 h-4 rounded border-slate-300 text-primary"
-                        />
-                        <span className="text-sm truncate">{task.title}</span>
-                      </label>
+                        {task.title}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -234,9 +230,10 @@ export default function AddTaskButton() {
 
               <button
                 type="submit"
-                className="w-full bg-primary text-slate-900 font-semibold py-3 rounded-lg hover:bg-primary/90 transition-colors"
+                disabled={!title.trim() || isSubmitting}
+                className="w-full py-3 bg-primary text-slate-900 font-semibold rounded-xl active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Add Task
+                {isSubmitting ? "Creating..." : "Create Task"}
               </button>
             </form>
           </div>

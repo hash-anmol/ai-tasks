@@ -42,6 +42,14 @@ export const getTasksByAgent = query({
   },
 });
 
+// Get single task
+export const getTask = query({
+  args: { id: v.id("tasks") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
 // Create task
 export const createTask = mutation({
   args: {
@@ -77,6 +85,31 @@ export const updateTaskStatus = mutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, {
       status: args.status,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Update task
+export const updateTask = mutation({
+  args: {
+    id: v.id("tasks"),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    status: v.optional(v.string()),
+    priority: v.optional(v.string()),
+    dueDate: v.optional(v.number()),
+    tags: v.optional(v.array(v.string())),
+    isAI: v.optional(v.boolean()),
+    agent: v.optional(v.string()),
+    aiStatus: v.optional(v.string()),
+    aiProgress: v.optional(v.number()),
+    aiResponse: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    await ctx.db.patch(id, {
+      ...updates,
       updatedAt: Date.now(),
     });
   },
