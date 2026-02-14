@@ -84,6 +84,17 @@ export default function SettingsPage() {
         </div>
       </Link>
 
+      {/* Keyboard Shortcuts */}
+      <Link href="/shortcuts" className="block bg-white rounded-xl p-4 shadow-sm mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold">Keyboard Shortcuts</h3>
+            <p className="text-sm text-slate-500">Speed up workflow</p>
+          </div>
+          <span className="material-icons text-slate-400">chevron_right</span>
+        </div>
+      </Link>
+
       {/* Import/Export */}
       <Link href="/import-export" className="block bg-white rounded-xl p-4 shadow-sm mb-4">
         <div className="flex items-center justify-between">
