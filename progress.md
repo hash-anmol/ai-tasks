@@ -34,8 +34,8 @@
 
 ### Task 2: OpenClaw Webhook Integration (HIGH PRIORITY)
 - [x] Create webhook endpoint `/api/webhook/openclaw` ✅
-- [ ] Receive task updates from OpenClaw
-- [ ] Store OpenClaw task IDs and status
+- [x] Receive task updates from OpenClaw ✅
+- [ ] Store OpenClaw task IDs and status (needs Convex)
 - [ ] Display webhook status in UI
 
 **Testing Plan:**
