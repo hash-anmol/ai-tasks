@@ -10,8 +10,8 @@ export default function BottomNav() {
 
   const navItems = [
     { href: "/", icon: "task_alt", label: "Tasks", active: pathname === "/" },
+    { href: "/agents", icon: "smart_toy", label: "Agents", active: pathname === "/agents" },
     { href: "/standup", icon: "assignment", label: "Standup", active: pathname === "/standup" },
-    { href: "/calendar", icon: "calendar_today", label: "Calendar", active: pathname === "/calendar" },
     { href: "/notifications", icon: "notifications", label: "Alerts", active: pathname === "/notifications", badge: unreadCount },
     { href: "/settings", icon: "settings", label: "Settings", active: pathname === "/settings" },
   ];
