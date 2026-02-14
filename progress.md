@@ -37,9 +37,9 @@
 - [ ] Display AI thinking/progress updates
 
 ### Task 4: GitHub Push
-- [ ] Create GitHub repo (already authenticated!)
-- [ ] Push all commits to main branch
-- [ ] Add .gitignore for node_modules, .next, etc.
+- [x] Create GitHub repo (already authenticated!)
+- [x] Push all commits to main branch
+- [x] Add .gitignore for node_modules, .next, etc.
 
 ### Task 5: Polish & Testing
 - [ ] Test all features on Vercel
