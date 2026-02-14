@@ -13,6 +13,7 @@ interface Task {
   isAI: boolean;
   agent?: "researcher" | "writer" | "editor" | "coordinator";
   dependsOn?: string[];
+  comments?: string[];
   createdAt: string;
   updatedAt: string;
 }

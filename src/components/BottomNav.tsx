@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useNotifications } from "@/hooks/useNotifications";
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const { unreadCount } = useNotifications();
 
   const navItems = [
     { href: "/", icon: "task_alt", label: "Tasks", active: pathname === "/" },
     { href: "/calendar", icon: "calendar_today", label: "Calendar", active: pathname === "/calendar" },
-    { href: "/projects", icon: "folder_open", label: "Projects", active: pathname === "/projects" },
+    { href: "/notifications", icon: "notifications", label: "Alerts", active: pathname === "/notifications", badge: unreadCount },
     { href: "/settings", icon: "settings", label: "Settings", active: pathname === "/settings" },
   ];
 
@@ -19,7 +21,7 @@ export default function BottomNav() {
         <Link
           key={item.href}
           href={item.href}
-          className={`flex flex-col items-center gap-1 ${
+          className={`flex flex-col items-center gap-1 relative ${
             item.active ? "text-primary" : "text-slate-400"
           }`}
         >
@@ -27,6 +29,11 @@ export default function BottomNav() {
           <span className={`text-[10px] ${item.active ? "font-bold" : "font-medium"}`}>
             {item.label}
           </span>
+          {item.badge && item.badge > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+              {item.badge > 9 ? "9+" : item.badge}
+            </span>
+          )}
         </Link>
       ))}
     </nav>
