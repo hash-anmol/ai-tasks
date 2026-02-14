@@ -38,7 +38,7 @@
 - [x] Display AI progress bar (pending/working/completed)
 - [x] Add AI notes section to each task
 - [x] Show AI status indicator (assigned/in_progress/done)
-- [ ] Display AI thinking/progress updates (via webhook)
+- [x] Display AI thinking/progress updates (via webhook) ✅
 
 **Testing Plan:**
 - [ ] Test: Create AI task → shows progress bar
