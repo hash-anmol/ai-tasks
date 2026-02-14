@@ -1,5 +1,5 @@
 {
-  "node": 20,
+  "node": "20",
   "generators": {},
   "functions": "convex/"
 }

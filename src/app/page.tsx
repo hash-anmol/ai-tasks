@@ -142,7 +142,11 @@ function PageContent() {
         <TabNavigation view={view} setView={setView} />
       </header>
       <main className="px-5 py-6 space-y-4 pb-32">
-        <TaskList agentFilter={agentFilter} />
+        {view === "kanban" ? (
+          <KanbanBoard />
+        ) : (
+          <TaskList agentFilter={agentFilter} />
+        )}
       </main>
       <AddTaskButton />
       <BottomNav />
