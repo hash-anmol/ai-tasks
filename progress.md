@@ -190,7 +190,7 @@
 - [x] Create task assignment UI ✅
 - [x] Add agent selector dropdown ✅
 - [x] Display assigned agent on task card ✅
-- [ ] Agent filters by assigneeId
+- [x] Agent filters by assigneeId ✅
 
 **Testing Plan:**
 - [ ] Test: Assign task to "Writer" → shows on task
