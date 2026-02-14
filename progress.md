@@ -67,10 +67,9 @@
 ---
 
 ### Task 5: 5-Column Kanban Board (NEW)
-- [ ] Update task status enum to: inbox | assigned | in_progress | review | done
-- [ ] Create KanbanBoard component with 5 columns
-- [ ] Add drag-and-drop between columns
-- [ ] Add visual indicators for each column
+- [x] Update task status enum to: inbox | assigned | in_progress | review | done ✅
+- [x] Create KanbanBoard component with 5 columns ✅
+- [x] Add drag-and-drop between columns ✅
 - [ ] Persist status changes to Convex
 
 **Testing Plan:**
