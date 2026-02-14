@@ -213,10 +213,10 @@
 ---
 
 ### Task 14: Agent Cards / Discovery (NEW)
-- [ ] Create agents table in Convex
-- [ ] Add agent status (idle/active/blocked)
-- [ ] Display agent cards in UI
-- [ ] Show what each agent is working on
+- [x] Create agents table (localStorage for now) ✅
+- [x] Add agent status (idle/active/blocked) ✅
+- [x] Display agent cards in UI ✅
+- [x] Show what each agent is working on ✅
 
 **Testing Plan:**
 - [ ] Test: Agent status updates in real-time
