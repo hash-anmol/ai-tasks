@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useGamification } from "@/hooks/useGamification";
 import BottomNav from "@/components/BottomNav";
+import Link from "next/link";
 
 export default function SettingsPage() {
   const { stats } = useGamification();
@@ -57,6 +58,17 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
+
+      {/* Webhooks */}
+      <Link href="/webhooks" className="block bg-white rounded-xl p-4 shadow-sm mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold">Webhooks</h3>
+            <p className="text-sm text-slate-500">Manage integrations</p>
+          </div>
+          <span className="material-icons text-slate-400">chevron_right</span>
+        </div>
+      </Link>
 
       {/* About */}
       <div className="bg-white rounded-xl p-4 shadow-sm">
