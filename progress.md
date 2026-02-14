@@ -19,12 +19,12 @@
 
 > ⚠️ **Note:** The following tasks require running `npx convex dev` locally. They cannot be done remotely.
 
-### Task 1: Set Up Convex Database (HIGH PRIORITY)
+### Task 1: Set Up Convex Database
 - [x] Created schema (`convex/schema.ts`) ✅
-- [x] Created CRUD functions (`convex/tasks.ts`, `convex/agentRuns.ts`) ✅
-- [ ] Run `npx convex dev` to deploy (DO THIS LOCALLY)
-- [ ] Add Convex provider to Next.js app
-- [ ] Migrate from localStorage to Convex
+- [x] Created CRUD functions ✅
+- [x] Deployed to Convex cloud ✅
+- [x] Added env vars to Vercel ✅
+- [ ] Connect frontend to Convex (update TaskList to use Convex)
 
 ### Task 2: OpenClaw Integration
 - [x] Created `/api/openclaw/execute` endpoint ✅
