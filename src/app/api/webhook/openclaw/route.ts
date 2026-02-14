@@ -15,23 +15,38 @@ export async function POST(request: Request) {
       );
     }
 
+    const taskId = body.taskId || body.openclawTaskId;
+    
+    // Get existing tasks from localStorage (in client-side only)
+    // For server-side, we'll return the update info and client can apply it
+    
     // Process the webhook payload
     const update = {
-      openclawTaskId: body.taskId || body.openclawTaskId,
-      status: body.status, // "assigned", "working", "completed"
-      progress: body.progress, // 0-100
-      notes: body.notes, // AI notes about the task
+      openclawTaskId: taskId,
+      status: body.status || body.aiStatus, // "assigned", "working", "completed"
+      progress: body.progress || body.aiProgress, // 0-100
+      notes: body.notes || body.aiNotes, // AI notes about the task
       timestamp: new Date().toISOString(),
     };
 
-    // In production, update Convex database
-    // For now, return success and log
     console.log("OpenClaw webhook received:", update);
 
+    // Return the update so client can apply it
+    // Client should listen for this and update localStorage
     return NextResponse.json({
       success: true,
       message: "Webhook received",
       received: update,
+      clientAction: {
+        type: "UPDATE_TASK",
+        taskId: taskId,
+        update: {
+          aiStatus: update.status,
+          aiProgress: update.progress,
+          aiNotes: update.notes,
+          openclawTaskId: update.openclawTaskId,
+        }
+      }
     });
   } catch (error) {
     console.error("Webhook error:", error);

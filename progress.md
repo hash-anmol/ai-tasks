@@ -9,7 +9,8 @@
 
 - **Name:** AI Tasks - Task Manager with AI Agent Integration
 - **Tech Stack:** Next.js 16, Tailwind CSS, Convex DB, OpenClaw Webhooks
-- **Current Status:** MVP UI + Gamification done, need OpenClaw integration + Convex DB
+- **Current Status:** MVP UI + Gamification done, adding multi-agent orchestration features
+- **Heartbeat:** ✅ Configured - runs every 15 min to pick up tasks
 
 ---
 
@@ -23,11 +24,26 @@
 - [ ] Test CRUD operations
 - [ ] Deploy with `npx convex deploy`
 
+**Testing Plan:**
+- [ ] Test: Create task via UI → appears in Convex dashboard
+- [ ] Test: Update task → reflects in real-time
+- [ ] Test: Delete task → removed from DB
+- [ ] Test: Refresh page → data persists
+
+---
+
 ### Task 2: OpenClaw Webhook Integration (HIGH PRIORITY)
 - [x] Create webhook endpoint `/api/webhook/openclaw` ✅
 - [ ] Receive task updates from OpenClaw
 - [ ] Store OpenClaw task IDs and status
 - [ ] Display webhook status in UI
+
+**Testing Plan:**
+- [ ] Test: Send POST to webhook → task updates in DB
+- [ ] Test: Invalid payload → returns 400 error
+- [ ] Test: Webhook down → graceful error handling
+
+---
 
 ### Task 3: AI Task Features
 - [x] Add "AI Task" creation button
@@ -36,112 +52,287 @@
 - [x] Show AI status indicator (assigned/in_progress/done)
 - [ ] Display AI thinking/progress updates (via webhook)
 
+**Testing Plan:**
+- [ ] Test: Create AI task → shows progress bar
+- [ ] Test: Update aiProgress → bar updates
+- [ ] Test: Add aiNotes → displays in expandable section
+
+---
+
 ### Task 4: GitHub Push
 - [x] Create GitHub repo (already authenticated!)
 - [x] Push all commits to main branch
 - [x] Add .gitignore for node_modules, .next, etc.
 
-### Task 6: Tab Navigation & Filtering
-- [x] Create TabNavigation component
-- [x] Add URL-based tab state (today/inbox/ai/archive)
-- [x] Filter tasks based on active tab
-- [ ] Add more tab content (Inbox, AI Tasks, Archive views)
+---
 
-### Task 7: Bottom Navigation
-- [x] Implement Calendar page
-- [x] Implement Projects page  
-- [x] Implement Settings page
-- [x] Connect bottom nav to pages
+### Task 5: 5-Column Kanban Board (NEW)
+- [ ] Update task status enum to: inbox | assigned | in_progress | review | done
+- [ ] Create KanbanBoard component with 5 columns
+- [ ] Add drag-and-drop between columns
+- [ ] Add visual indicators for each column
+- [ ] Persist status changes to Convex
+
+**Testing Plan:**
+- [ ] Test: Create task → appears in "Inbox" column
+- [ ] Test: Drag task to "In Progress" → status updates
+- [ ] Test: Refresh page → task stays in new column
+- [ ] Test: Mobile view → columns stack vertically
 
 ---
 
-## Current Task Status
+### Task 6: Agent SOUL System (NEW)
+- [ ] Create `agents/` folder in workspace
+- [ ] Create `SOUL.md` template for research agent
+- [ ] Create `SOUL.md` for writer agent
+- [ ] Create `SOUL.md` for editor agent
+- [ ] Create `SOUL.md` for coordinator agent
+- [ ] Add AGENTS.md with operating instructions
 
-### ✅ Completed
+**SOUL Template:**
+```markdown
+# SOUL.md — [Agent Name]
+
+## Role
+[One-line description]
+
+## Personality
+[Specific traits, constraints]
+
+## What You're Good At
+- [Skill 1]
+- [Skill 2]
+
+## What You Refuse To Do
+- [Constraint 1]
+- [Constraint 2]
+
+## Examples of Your Work
+[Links to past work]
+
+## Anti-Examples
+[What not to do]
+```
+
+**Testing Plan:**
+- [ ] Test: Agent reads SOUL.md on startup
+- [ ] Test: Agent follows personality constraints
+- [ ] Test: Multiple agents have distinct personalities
+
+---
+
+### Task 7: Memory System (NEW)
+- [ ] Create `memory/WORKING.md` - current task state
+- [ ] Create `memory/YYYY-MM-DD.md` template - daily logs
+- [ ] Create `MEMORY.md` - long-term memory
+- [ ] Add memory read/write functions in app
+- [ ] Integrate with agent heartbeat
+
+**Testing Plan:**
+- [ ] Test: Write to WORKING.md → persists
+- [ ] Test: Read today's date file → creates if not exists
+- [ ] Test: MEMORY.md stores across sessions
+
+---
+
+### Task 8: Heartbeat Integration (NEW - Already Exists!)
+- [x] Cron job configured: every 15 min ✅
+- [ ] Add task polling from Convex
+- [ ] Add HEARTBEAT.md file with checklist
+- [ ] Agent picks next available task
+- [ ] Updates task status on pickup
+
+**Testing Plan:**
+- [ ] Test: Cron fires → agent logs activity
+- [ ] Test: New task appears → agent picks it up
+- [ ] Test: No tasks → returns HEARTBEAT_OK
+
+---
+
+### Task 9: Task Dependencies (NEW)
+- [ ] Add `dependsOn` field to task schema
+- [ ] Show "waiting on X" blocked status
+- [ ] Auto-block dependent tasks
+- [ ] Visual indicator for blocked tasks
+
+**Testing Plan:**
+- [ ] Test: Task B depends on A → B blocked until A done
+- [ ] Test: Complete A → B unblocks automatically
+- [ ] Test: Circular dependency → error handling
+
+---
+
+### Task 10: @Mention System (NEW)
+- [ ] Add mention parsing in comments (@agent-name)
+- [ ] Create notifications table in Convex
+- [ ] Agent heartbeat checks mentions
+- [ ] Display unread mention badge
+
+**Testing Plan:**
+- [ ] Test: Type @writer → triggers notification
+- [ ] Test: Agent heartbeat → picks up mention
+- [ ] Test: Mark as read → badge clears
+
+---
+
+### Task 11: Shared Context (AGENTS.md) (NEW)
+- [ ] Create AGENTS.md in workspace
+- [ ] Document tool access permissions
+- [ ] Document memory file locations
+- [ ] Document communication protocols
+
+**Testing Plan:**
+- [ ] Test: Agent reads AGENTS.md on startup
+- [ ] Test: All agents follow same operating rules
+
+---
+
+### Task 12: Multi-Agent Role Assignment (NEW)
+- [ ] Create task assignment UI
+- [ ] Add agent selector dropdown
+- [ ] Display assigned agent on task card
+- [ ] Agent filters by assigneeId
+
+**Testing Plan:**
+- [ ] Test: Assign task to "Writer" → shows on task
+- [ ] Test: Writer agent → sees assigned task
+- [ ] Test: Unassigned tasks → show in Inbox
+
+---
+
+### Task 13: Daily Standup Generator (NEW)
+- [ ] Create standup query (completed/in_progress/blocked)
+- [ ] Add cron for daily standup (11:30 PM IST)
+- [ ] Format as Telegram-ready message
+- [ ] Send to Telegram channel
+
+**Testing Plan:**
+- [ ] Test: Cron fires → generates summary
+- [ ] Test: Summary includes all 3 sections
+- [ ] Test: Message format is readable
+
+---
+
+### Task 14: Agent Cards / Discovery (NEW)
+- [ ] Create agents table in Convex
+- [ ] Add agent status (idle/active/blocked)
+- [ ] Display agent cards in UI
+- [ ] Show what each agent is working on
+
+**Testing Plan:**
+- [ ] Test: Agent status updates in real-time
+- [ ] Test: UI shows all registered agents
+- [ ] Test: Click agent → shows their tasks
+
+---
+
+### Task 15: Real-time Activity Feed (NEW)
+- [ ] Create activity log table
+- [ ] Log: task created, updated, commented
+- [ ] Display feed on dashboard
+- [ ] Real-time updates via Convex
+
+**Testing Plan:**
+- [ ] Test: Create task → appears in feed
+- [ ] Test: Update task → new feed entry
+- [ ] Test: Feed updates without refresh
+
+---
+
+## Completed Tasks
+
+### ✅ Already Completed
 1. Next.js project with Tailwind CSS
 2. TaskList and AddTaskButton components
-3. Bottom navigation
+3. Bottom navigation (Calendar, Projects, Settings)
 4. API endpoint `/api/tasks`
 5. Gamification (coins, streaks, XP, levels)
 6. Vercel deployment
-7. GitHub authentication (READY!)
-
-### ⏳ In Progress
-1. Convex database setup
-2. OpenClaw webhook integration
-
-### ❌ Not Started
-1. AI task progress display
-2. AI notes field
-3. GitHub push
+7. GitHub repo setup
+8. Tab Navigation (Today/Inbox/AI/Archive)
+9. Achievements page
+10. **Heartbeat: Every 15 min ✅**
 
 ---
 
-## Detailed Technical Requirements
+## Architecture: How Agents Discover Tasks
 
-### Convex Schema (Task 1)
-```typescript
-// convex/schema.ts
-export default defineSchema({
-  tasks: defineTable({
-    title: v.string(),
-    description: v.optional(v.string()),
-    status: v.union(v.literal("pending"), v.literal("in_progress"), v.literal("done")),
-    priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
-    
-    // AI-specific fields
-    isAI: v.boolean(),
-    aiProgress: v.optional(v.number()), // 0-100
-    aiNotes: v.optional(v.string()),
-    aiStatus: v.optional(v.union(v.literal("assigned"), v.literal("working"), v.literal("completed"))),
-    openclawTaskId: v.optional(v.string()),
-    
-    // Gamification
-    coinsEarned: v.optional(v.number()),
-    
-    // Metadata
-    dueDate: v.optional(v.string()),
-    tags: v.array(v.string()),
-    createdAt: v.string(),
-    updatedAt: v.string(),
-  }),
-});
 ```
-
-### OpenClaw Webhook (Task 2)
-```typescript
-// POST /api/webhook/openclaw
-// Receives: { taskId, status, progress, notes }
-// Updates task in Convex
+┌─────────────────────────────────────────────────────────┐
+│                    HEARTBEAT (15 min)                    │
+│  Agent wakes → Read WORKING.md → Query Con vex          │
+│ "SELECT * FROM tasks WHERE assigneeId = 'agent'        │
+│   AND status = 'assigned'"                             │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│                    CONVEY DATABASE                      │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  │
+│  │ Tasks   │  │ Agents  │  │ Messages│  │Activity │  │
+│  └─────────┘  └─────────┘  └─────────┘  └─────────┘  │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│                  KANBAN BOARD (UI)                      │
+│  Inbox → Assigned → In Progress → Review → Done        │
+└─────────────────────────────────────────────────────────┘
 ```
-
-### AI Task UI Updates (Task 3)
-- Progress bar showing AI work status (0%, 25%, 50%, 75%, 100%)
-- "AI Notes" expandable section
-- Status badges: "Assigned to AI", "AI Working", "AI Completed"
-- Real-time updates via Convex subscriptions
 
 ---
 
-## Scheduled Jobs
-- **Every 15 min:** Continue development (heartbeat)
-- **7:30 AM daily:** Morning progress summary to Telegram
+## Agent Roles
+
+| Agent | Role | Trigger |
+|-------|------|---------|
+| Coordinator | Breaks down tasks | @mention |
+| Researcher | Finds sources, verifies | Assigned to research |
+| Writer | Creates content | Assigned to drafting |
+| Editor | Reviews, edits | Task in Review |
+| Developer | Builds features | Assigned to coding |
+
+---
+
+## Scheduled Jobs (CRON)
+
+| Job | Schedule | Purpose |
+|-----|----------|---------|
+| Continue Development | Every 15 min | Pick up next task |
+| Morning Standup | 7:58 AM IST | Wake up + focus |
+| Daily Summary | 7:30 PM IST | Progress report |
+| Weekly Review | Monday 9 AM | Week summary |
 
 ---
 
 ## GitHub Status
-- ✅ PUSHED! Repo: https://github.com/hash-anmol/ai-tasks
-
----
-
-## Resources
-- Convex Docs: https://docs.convex.dev/home
-- Convex Next.js Quickstart: https://docs.convex.dev/quickstart/nextjs
+- ✅ Repo: https://github.com/hash-anmol/ai-tasks
 
 ---
 
 ## Notes
+
 - Using Tailwind v4 with @theme for colors
 - Green accent: #13ec5b
 - Material Icons for UI
 - localStorage currently for gamification stats
+- **Development flow: 15 min per task - build + test → next task**
+
+---
+
+## Testing Standards (Per Task)
+
+Every task must have:
+1. ✅ Unit tests for new components
+2. ✅ Integration test for Convex/DB operations
+3. ✅ E2E test for user flows
+4. ✅ Manual verification on Vercel staging
+
+---
+
+## Resources
+
+- Convex Docs: https://docs.convex.dev/home
+- Convex Next.js Quickstart: https://docs.convex.dev/quickstart/nextjs
+- Article Reference: "The Complete Guide to Building Mission Control" by Bhanu Teja P
+- OpenClaw Docs: /home/anmol/.openclaw/workspace/docs
