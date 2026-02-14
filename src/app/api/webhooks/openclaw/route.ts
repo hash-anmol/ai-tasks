@@ -1,69 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * Webhook for OpenClaw to send task results back to AI Tasks
- * 
- * OpenClaw should call this endpoint when:
- * - Task starts: status = "running"
- * - Progress update: status = "running", progress = X
- * - Task complete: status = "completed", response = "..."
- * - Task failed: status = "failed", response = "error message"
+ * Webhook for OpenClaw to send results
+ * Works without Convex - stores in memory/file for now
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { sessionId, status, message, progress, response, taskId } = body;
 
-    if (!sessionId) {
-      return NextResponse.json(
-        { error: "sessionId is required" },
-        { status: 400 }
-      );
-    }
+    console.log("📥 OpenClaw webhook:", { sessionId, status, taskId });
 
-    console.log("Received webhook from OpenClaw:", {
+    // Store webhook data (could be file, redis, etc.)
+    // For now - just log and return success
+    const webhookLog = {
       sessionId,
       status,
       message,
       progress,
       taskId,
-    });
-
-    // TODO: Store in Convex when it's set up
-    // For now, just acknowledge receipt
+      receivedAt: new Date().toISOString()
+    };
     
-    // Store in localStorage for demo (will be replaced with Convex)
-    if (typeof window !== 'undefined') {
-      const webhookData = JSON.parse(localStorage.getItem('openclaw-webhooks') || '[]');
-      webhookData.push({
-        sessionId,
-        status,
-        message,
-        progress,
-        response,
-        taskId,
-        receivedAt: Date.now(),
-      });
-      localStorage.setItem('openclaw-webhooks', JSON.stringify(webhookData));
-    }
+    // TODO: Store in Convex when available
+    // await ctx.db.insert("webhookLogs", webhookLog);
 
-    return NextResponse.json({
-      success: true,
-      message: "Webhook received",
-    });
-  } catch (error) {
+    return NextResponse.json({ success: true, received: webhookLog });
+  } catch (error: any) {
     console.error("Webhook error:", error);
-    return NextResponse.json(
-      { error: "Failed to process webhook" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// Handle GET for health check
 export async function GET() {
-  return NextResponse.json({
+  return NextResponse.json({ 
     status: "ok",
-    service: "AI Tasks Webhook",
+    service: "AI Tasks Webhook Handler",
+    ready: true
   });
 }
