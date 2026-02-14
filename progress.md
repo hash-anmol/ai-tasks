@@ -188,9 +188,9 @@
 ---
 
 ### Task 12: Multi-Agent Role Assignment (NEW)
-- [ ] Create task assignment UI
-- [ ] Add agent selector dropdown
-- [ ] Display assigned agent on task card
+- [x] Create task assignment UI ✅
+- [x] Add agent selector dropdown ✅
+- [x] Display assigned agent on task card ✅
 - [ ] Agent filters by assigneeId
 
 **Testing Plan:**
