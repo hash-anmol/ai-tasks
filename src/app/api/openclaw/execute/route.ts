@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { api } from "@/convex/_generated/api";
-import { fetchAction } from "convex/nextjs";
 
 const OPENCLAW_URL = process.env.NEXT_PUBLIC_OPENCLAW_URL || "http://homeserver:18789";
 const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
@@ -47,20 +45,6 @@ export async function POST(request: NextRequest) {
     const result = await openclawResponse.json();
     const sessionId = result.sessionId;
 
-    // If taskId provided, link the session to the task in Convex
-    if (taskId) {
-      try {
-        await fetchAction(api.tasks.linkOpenClawSession, {
-          id: taskId,
-          openclawSessionId: sessionId,
-          aiStatus: "running",
-        });
-      } catch (convexError) {
-        console.error("Convex error:", convexError);
-        // Continue even if Convex update fails
-      }
-    }
-
     return NextResponse.json({
       success: true,
       sessionId,
@@ -69,7 +53,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Execute error:", error);
     return NextResponse.json(
-      { error: "Failed to execute task" },
+      { error: "Failed to execute task. Is OpenClaw reachable?" },
       { status: 500 }
     );
   }

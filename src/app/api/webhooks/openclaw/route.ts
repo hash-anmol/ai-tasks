@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { api } from "@/convex/_generated/api";
-import { fetchAction } from "convex/nextjs";
 
 /**
  * Webhook for OpenClaw to send task results back to AI Tasks
@@ -31,20 +29,22 @@ export async function POST(request: NextRequest) {
       taskId,
     });
 
-    // Find task by sessionId and update it
-    if (taskId) {
-      // Update the task with AI progress
-      try {
-        await fetchAction(api.tasks.updateAIProgress, {
-          id: taskId,
-          aiStatus: status,
-          aiProgress: progress || 0,
-          aiResponse: response || message,
-          aiResponseShort: response?.substring(0, 200) || message?.substring(0, 200),
-        });
-      } catch (convexError) {
-        console.error("Convex update error:", convexError);
-      }
+    // TODO: Store in Convex when it's set up
+    // For now, just acknowledge receipt
+    
+    // Store in localStorage for demo (will be replaced with Convex)
+    if (typeof window !== 'undefined') {
+      const webhookData = JSON.parse(localStorage.getItem('openclaw-webhooks') || '[]');
+      webhookData.push({
+        sessionId,
+        status,
+        message,
+        progress,
+        response,
+        taskId,
+        receivedAt: Date.now(),
+      });
+      localStorage.setItem('openclaw-webhooks', JSON.stringify(webhookData));
     }
 
     return NextResponse.json({
