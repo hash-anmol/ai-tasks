@@ -48,10 +48,10 @@
 - [ ] Add more tab content (Inbox, AI Tasks, Archive views)
 
 ### Task 7: Bottom Navigation
-- [ ] Implement Calendar page
-- [ ] Implement Projects page  
-- [ ] Implement Settings page
-- [ ] Connect bottom nav to pages
+- [x] Implement Calendar page
+- [x] Implement Projects page  
+- [x] Implement Settings page
+- [x] Connect bottom nav to pages
 
 ---
 
