@@ -41,10 +41,17 @@
 - [x] Push all commits to main branch
 - [x] Add .gitignore for node_modules, .next, etc.
 
-### Task 5: Polish & Testing
-- [x] Test all features on Vercel
-- [x] Fix any bugs
-- [x] Add more gamification (achievements page)
+### Task 6: Tab Navigation & Filtering
+- [x] Create TabNavigation component
+- [x] Add URL-based tab state (today/inbox/ai/archive)
+- [x] Filter tasks based on active tab
+- [ ] Add more tab content (Inbox, AI Tasks, Archive views)
+
+### Task 7: Bottom Navigation
+- [ ] Implement Calendar page
+- [ ] Implement Projects page  
+- [ ] Implement Settings page
+- [ ] Connect bottom nav to pages
 
 ---
 
