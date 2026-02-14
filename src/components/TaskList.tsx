@@ -12,6 +12,11 @@ interface Task {
   dueDate?: string;
   tags: string[];
   isAI: boolean;
+  // AI-specific fields
+  aiProgress?: number; // 0-100
+  aiNotes?: string;
+  aiStatus?: "assigned" | "working" | "completed";
+  openclawTaskId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -25,6 +30,9 @@ const initialTasks: Task[] = [
     priority: "high",
     tags: ["AI"],
     isAI: true,
+    aiProgress: 100,
+    aiNotes: "Completed analysis of design specifications. All items approved.",
+    aiStatus: "completed",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -45,6 +53,9 @@ const initialTasks: Task[] = [
     status: "in_progress",
     tags: ["AI"],
     isAI: true,
+    aiProgress: 65,
+    aiNotes: "Analyzing requirements and creating milestone structure...",
+    aiStatus: "working",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -188,48 +199,88 @@ export default function TaskList() {
           .map((task) => (
             <div
               key={task._id}
-              className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex items-center gap-4"
+              className="bg-white rounded-xl p-4 shadow-sm border border-slate-100"
             >
-              <div className="flex-shrink-0">
-                <button
-                  onClick={() => toggleTaskStatus(task._id)}
-                  className="w-6 h-6 rounded-full border-2 border-slate-200 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
-                >
-                  <span className="material-icons text-slate-300 text-sm">circle</span>
-                </button>
-              </div>
-              <div className="flex-grow">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-slate-800 text-[15px]">{task.title}</h3>
-                  {task.isAI && (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary text-slate-900 uppercase tracking-wide">
-                      AI
-                    </span>
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 pt-1">
+                  <button
+                    onClick={() => toggleTaskStatus(task._id)}
+                    className="w-6 h-6 rounded-full border-2 border-slate-200 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
+                  >
+                    <span className="material-icons text-slate-300 text-sm">circle</span>
+                  </button>
+                </div>
+                <div className="flex-grow">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-slate-800 text-[15px]">{task.title}</h3>
+                    {task.isAI && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary text-slate-900 uppercase tracking-wide">
+                        AI
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* AI Progress Bar */}
+                  {task.isAI && task.aiProgress !== undefined && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-slate-500">AI Progress</span>
+                        <span className="font-medium text-primary">{task.aiProgress}%</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-primary to-green-400 rounded-full transition-all"
+                          style={{ width: `${task.aiProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* AI Status Badge */}
+                  {task.isAI && task.aiStatus && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide
+                        ${task.aiStatus === 'assigned' ? 'bg-blue-100 text-blue-700' : 
+                          task.aiStatus === 'working' ? 'bg-yellow-100 text-yellow-700' : 
+                          'bg-green-100 text-green-700'}`}>
+                        {task.aiStatus === 'assigned' && '🤖 Assigned'}
+                        {task.aiStatus === 'working' && '⚡ AI Working'}
+                        {task.aiStatus === 'completed' && '✅ Done'}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* AI Notes */}
+                  {task.isAI && task.aiNotes && (
+                    <div className="mt-2 p-2 bg-slate-50 rounded-lg">
+                      <p className="text-xs text-slate-600 italic">"{task.aiNotes}"</p>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center gap-3 mt-2">
+                    {task.dueDate && (
+                      <div className="flex items-center text-slate-400 gap-1">
+                        <span className="material-icons text-sm">schedule</span>
+                        <span className="text-xs">{task.dueDate}</span>
+                      </div>
+                    )}
+                    {task.priority && (
+                      <div className="flex items-center text-slate-400 gap-1">
+                        <span className="material-icons text-sm">flag</span>
+                        <span className="text-xs capitalize">{task.priority}</span>
+                      </div>
+                    )}
+                    {task.status === "in_progress" && (
+                      <div className="flex items-center text-primary gap-1">
+                        <span className="material-icons text-sm">auto_awesome</span>
+                        <span className="text-xs font-medium">In Progress</span>
+                      </div>
+                    )}
+                  </div>
+                  {task.description && (
+                    <p className="text-xs text-slate-400 mt-0.5">{task.description}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-3 mt-1">
-                  {task.dueDate && (
-                    <div className="flex items-center text-slate-400 gap-1">
-                      <span className="material-icons text-sm">schedule</span>
-                      <span className="text-xs">{task.dueDate}</span>
-                    </div>
-                  )}
-                  {task.priority && (
-                    <div className="flex items-center text-slate-400 gap-1">
-                      <span className="material-icons text-sm">flag</span>
-                      <span className="text-xs capitalize">{task.priority}</span>
-                    </div>
-                  )}
-                  {task.status === "in_progress" && (
-                    <div className="flex items-center text-primary gap-1">
-                      <span className="material-icons text-sm">auto_awesome</span>
-                      <span className="text-xs font-medium">In Progress</span>
-                    </div>
-                  )}
-                </div>
-                {task.description && (
-                  <p className="text-xs text-slate-400 mt-0.5">{task.description}</p>
-                )}
               </div>
             </div>
           ))}
