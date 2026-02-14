@@ -149,10 +149,10 @@
 ---
 
 ### Task 9: Task Dependencies (NEW)
-- [ ] Add `dependsOn` field to task schema
-- [ ] Show "waiting on X" blocked status
-- [ ] Auto-block dependent tasks
-- [ ] Visual indicator for blocked tasks
+- [x] Add `dependsOn` field to task schema ✅
+- [x] Show "waiting on X" blocked status ✅
+- [x] Auto-block dependent tasks ✅
+- [x] Visual indicator for blocked tasks ✅
 
 **Testing Plan:**
 - [ ] Test: Task B depends on A → B blocked until A done
