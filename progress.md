@@ -191,7 +191,7 @@
 - [x] Create standup query (completed/in_progress/blocked) ✅
 - [x] Add cron for daily standup (11:30 PM IST) ✅
 - [x] Format as Telegram-ready message ✅
-- [ ] Send to Telegram channel
+- [ ] Send to Telegram channel (needs Telegram bot setup)
 
 **Testing Plan:**
 - [ ] Test: Cron fires → generates summary
