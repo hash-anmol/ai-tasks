@@ -42,9 +42,9 @@
 - [x] Add .gitignore for node_modules, .next, etc.
 
 ### Task 5: Polish & Testing
-- [ ] Test all features on Vercel
-- [ ] Fix any bugs
-- [ ] Add more gamification (achievements page)
+- [x] Test all features on Vercel
+- [x] Fix any bugs
+- [x] Add more gamification (achievements page)
 
 ---
 
