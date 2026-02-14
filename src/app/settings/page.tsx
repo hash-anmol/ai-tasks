@@ -70,6 +70,17 @@ export default function SettingsPage() {
         </div>
       </Link>
 
+      {/* Import/Export */}
+      <Link href="/import-export" className="block bg-white rounded-xl p-4 shadow-sm mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold">Import / Export</h3>
+            <p className="text-sm text-slate-500">Backup your tasks</p>
+          </div>
+          <span className="material-icons text-slate-400">chevron_right</span>
+        </div>
+      </Link>
+
       {/* About */}
       <div className="bg-white rounded-xl p-4 shadow-sm">
         <h3 className="font-bold mb-3">About</h3>
