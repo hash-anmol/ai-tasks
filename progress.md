@@ -2,15 +2,16 @@
 
 **Project Location:** `/home/anmol/.openclaw/workspace/ai-tasks/`
 **Vercel URL:** https://ai-tasks-zeta.vercel.app
+**GitHub:** https://github.com/hash-anmol/ai-tasks
 
 ---
 
 ## Project Overview
 
 - **Name:** AI Tasks - Task Manager with AI Agent Integration
-- **Tech Stack:** Next.js 16, Tailwind CSS, Convex DB, OpenClaw Webhooks
-- **Current Status:** ✅ All remote features complete! 
-- **Heartbeat:** ✅ Configured - runs every 15 min to pick up tasks
+- **Tech Stack:** Next.js 16, Tailwind CSS, Convex DB, OpenClaw
+- **Current Status:** 🔄 Integrating with OpenClaw
+- **Git:** ✅ Pushed to GitHub, auto-deploying to Vercel
 
 ---
 
@@ -19,17 +20,18 @@
 > ⚠️ **Note:** The following tasks require running `npx convex dev` locally. They cannot be done remotely.
 
 ### Task 1: Set Up Convex Database (HIGH PRIORITY)
-- [ ] Run `npx convex dev` to set up Convex project
-- [ ] Create schema for tasks with AI fields
+- [x] Created schema (`convex/schema.ts`) ✅
+- [x] Created CRUD functions (`convex/tasks.ts`, `convex/agentRuns.ts`) ✅
+- [ ] Run `npx convex dev` to deploy (DO THIS LOCALLY)
 - [ ] Add Convex provider to Next.js app
 - [ ] Migrate from localStorage to Convex
-- [ ] Deploy with `npx convex deploy`
 
-### Task 2: OpenClaw Webhook Integration
-- [x] Create webhook endpoint ✅
-- [x] Receive task updates ✅
-- [ ] Store in Convex (needs Task 1)
-- [x] Display webhook status in UI ✅
+### Task 2: OpenClaw Integration
+- [x] Created `/api/openclaw/execute` endpoint ✅
+- [x] Created `/api/webhooks/openclaw` endpoint ✅
+- [x] Created OpenClaw client library (`src/lib/openclaw.ts`) ✅
+- [x] Created AGENTS.md documentation ✅
+- [ ] Configure environment variables (see .env.local.example)
 
 ---
 
@@ -54,10 +56,11 @@
 
 ---
 
-### Task 5: 5-Column Kanban Board (NEW)
+### Task 5: 5-Column Kanban Board
 - [x] Update task status enum to: inbox | assigned | in_progress | review | done ✅
 - [x] Create KanbanBoard component with 5 columns ✅
 - [x] Add drag-and-drop between columns ✅
+- [x] Fixed view toggle (list ↔ kanban) ✅
 - [ ] Persist status changes to Convex
 
 **Testing Plan:**
