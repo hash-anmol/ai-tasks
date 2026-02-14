@@ -15,6 +15,7 @@ interface Task {
   tags: string[];
   isAI: boolean;
   agent?: "researcher" | "writer" | "editor" | "coordinator";
+  dependsOn?: string[];
   aiProgress?: number;
   aiNotes?: string;
   aiStatus?: "assigned" | "working" | "completed";
@@ -39,6 +40,15 @@ const AGENTS = [
 ];
 
 const getAgentInfo = (agentId?: string) => AGENTS.find(a => a.id === agentId);
+
+// Check if all dependencies are completed
+const areDependenciesMet = (task: Task, allTasks: Task[]): boolean => {
+  if (!task.dependsOn || task.dependsOn.length === 0) return true;
+  return task.dependsOn.every(depId => {
+    const depTask = allTasks.find(t => t._id === depId);
+    return depTask?.status === "done";
+  });
+};
 
 export default function KanbanBoard() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -76,6 +86,15 @@ export default function KanbanBoard() {
 
   const handleDrop = (columnId: TaskStatus) => {
     if (!draggedTask) return;
+    
+    const task = tasks.find(t => t._id === draggedTask);
+    if (!task) return;
+    
+    // Prevent moving to done if dependencies aren't met
+    if (columnId === "done" && !areDependenciesMet(task, tasks)) {
+      setDraggedTask(null);
+      return;
+    }
     
     setTasks(prev => prev.map(task => {
       if (task._id === draggedTask) {
@@ -118,15 +137,20 @@ export default function KanbanBoard() {
             {getTasksByColumn(column.id).map(task => (
               <div
                 key={task._id}
-                draggable
+                draggable={areDependenciesMet(task, tasks)}
                 onDragStart={() => handleDragStart(task._id)}
                 className={`bg-white rounded-lg p-3 shadow-sm border border-slate-100 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow ${
                   draggedTask === task._id ? "opacity-50" : ""
-                }`}
+                } ${!areDependenciesMet(task, tasks) ? 'opacity-60 border-l-4 border-l-red-400' : ''}`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <h4 className="font-medium text-sm text-slate-800">{task.title}</h4>
+                  <h4 className={`font-medium text-sm ${!areDependenciesMet(task, tasks) ? 'text-slate-400' : 'text-slate-800'}`}>
+                    {task.title}
+                  </h4>
                   <div className="flex gap-1 flex-shrink-0">
+                    {!areDependenciesMet(task, tasks) && (
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-red-100 text-red-700 font-bold">🔒</span>
+                    )}
                     {task.agent && (
                       <span className="text-xs">{getAgentInfo(task.agent)?.emoji}</span>
                     )}

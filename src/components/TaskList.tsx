@@ -14,6 +14,7 @@ interface Task {
   tags: string[];
   isAI: boolean;
   agent?: "researcher" | "writer" | "editor" | "coordinator";
+  dependsOn?: string[];
   aiProgress?: number;
   aiNotes?: string;
   aiStatus?: "assigned" | "working" | "completed";
@@ -30,6 +31,26 @@ const AGENTS = [
 ];
 
 const getAgentInfo = (agentId?: string) => AGENTS.find(a => a.id === agentId);
+
+// Check if all dependencies are completed
+const areDependenciesMet = (task: Task, allTasks: Task[]): boolean => {
+  if (!task.dependsOn || task.dependsOn.length === 0) return true;
+  return task.dependsOn.every(depId => {
+    const depTask = allTasks.find(t => t._id === depId);
+    return depTask?.status === "done";
+  });
+};
+
+// Get dependency titles for display
+const getDependencyTitles = (task: Task, allTasks: Task[]): string[] => {
+  if (!task.dependsOn || task.dependsOn.length === 0) return [];
+  return task.dependsOn
+    .map(depId => {
+      const depTask = allTasks.find(t => t._id === depId);
+      return depTask?.status !== "done" ? depTask?.title : null;
+    })
+    .filter(Boolean) as string[];
+};
 
 const initialTasks: Task[] = [
   {
@@ -136,6 +157,14 @@ function TaskListContent() {
   }, [tasks, isLoading]);
 
   const toggleTaskStatus = (taskId: string) => {
+    const task = tasks.find(t => t._id === taskId);
+    if (!task) return;
+    
+    // Check dependencies before marking as done
+    if (task.status !== "done" && !areDependenciesMet(task, tasks)) {
+      return; // Can't complete blocked task
+    }
+    
     setTasks((prev) =>
       prev.map((task) => {
         if (task._id === taskId) {
@@ -208,8 +237,15 @@ function TaskListContent() {
                     </div>
                     <div className="flex-grow">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-slate-800 text-[15px]">{task.title}</h3>
+                        <h3 className={`font-semibold text-[15px] ${!areDependenciesMet(task, tasks) ? 'text-slate-400' : 'text-slate-800'}`}>
+                          {task.title}
+                        </h3>
                         <div className="flex items-center gap-1">
+                          {!areDependenciesMet(task, tasks) && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                              🔒 Blocked
+                            </span>
+                          )}
                           {task.agent && (
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${getAgentInfo(task.agent)?.color || 'bg-slate-500'} text-white uppercase tracking-wide`}>
                               {getAgentInfo(task.agent)?.emoji} {getAgentInfo(task.agent)?.name}
@@ -222,6 +258,14 @@ function TaskListContent() {
                           )}
                         </div>
                       </div>
+                      {!areDependenciesMet(task, tasks) && (
+                        <div className="mt-2 p-2 bg-red-50 rounded-lg">
+                          <p className="text-xs text-red-600 flex items-center gap-1">
+                            <span className="material-icons text-xs">block</span>
+                            Waiting on: {getDependencyTitles(task, tasks).join(", ")}
+                          </p>
+                        </div>
+                      )}
                       {task.isAI && task.aiProgress !== undefined && (
                         <div className="mt-2">
                           <div className="flex items-center justify-between text-xs mb-1">

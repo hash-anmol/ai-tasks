@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Task {
   _id: string;
@@ -12,6 +12,7 @@ interface Task {
   tags: string[];
   isAI: boolean;
   agent?: "researcher" | "writer" | "editor" | "coordinator";
+  dependsOn?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -31,6 +32,16 @@ export default function AddTaskButton() {
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
   const [isAI, setIsAI] = useState(false);
   const [agent, setAgent] = useState<Task["agent"]>(undefined);
+  const [dependsOn, setDependsOn] = useState<string[]>([]);
+  const [existingTasks, setExistingTasks] = useState<Task[]>([]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("ai-tasks");
+    if (stored) {
+      const tasks = JSON.parse(stored);
+      setExistingTasks(tasks.filter((t: Task) => t.status !== "done"));
+    }
+  }, [isOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,6 +58,7 @@ export default function AddTaskButton() {
       tags: [],
       isAI,
       agent: isAI ? agent : undefined,
+      dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -62,9 +74,18 @@ export default function AddTaskButton() {
     setPriority("medium");
     setIsAI(false);
     setAgent(undefined);
+    setDependsOn([]);
     setIsOpen(false);
 
     window.location.reload();
+  };
+
+  const toggleDependency = (taskId: string) => {
+    setDependsOn(prev => 
+      prev.includes(taskId) 
+        ? prev.filter(id => id !== taskId)
+        : [...prev, taskId]
+    );
   };
 
   return (
@@ -82,7 +103,7 @@ export default function AddTaskButton() {
           onClick={() => setIsOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl"
+            className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-xl font-bold mb-4">Add New Task</h2>
@@ -180,6 +201,31 @@ export default function AddTaskButton() {
                         <span>{a.emoji}</span>
                         <span className="text-sm font-medium">{a.name}</span>
                       </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {existingTasks.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Depends on (optional)
+                  </label>
+                  <p className="text-xs text-slate-500 mb-2">This task will be blocked until selected tasks are done</p>
+                  <div className="space-y-2 max-h-32 overflow-y-auto">
+                    {existingTasks.map((task) => (
+                      <label
+                        key={task._id}
+                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={dependsOn.includes(task._id)}
+                          onChange={() => toggleDependency(task._id)}
+                          className="w-4 h-4 rounded border-slate-300 text-primary"
+                        />
+                        <span className="text-sm truncate">{task.title}</span>
+                      </label>
                     ))}
                   </div>
                 </div>
