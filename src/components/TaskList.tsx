@@ -23,6 +23,10 @@ interface Task {
   updatedAt: string;
 }
 
+interface TaskListProps {
+  agentFilter?: string;
+}
+
 const AGENTS = [
   { id: "researcher", name: "Researcher", emoji: "🔍", color: "bg-blue-500" },
   { id: "writer", name: "Writer", emoji: "✍️", color: "bg-purple-500" },
@@ -114,7 +118,7 @@ const initialTasks: Task[] = [
   },
 ];
 
-function TaskListContent() {
+function TaskListContent({ agentFilter = "all" }: TaskListProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showReward, setShowReward] = useState<{coins: number; xp: number} | null>(null);
@@ -125,15 +129,22 @@ function TaskListContent() {
 
   // Filter tasks based on tab
   const getFilteredTasks = () => {
+    let filtered = tasks;
+    
+    // Filter by agent if set
+    if (agentFilter && agentFilter !== "all") {
+      filtered = filtered.filter((t) => t.agent === agentFilter);
+    }
+    
     switch (activeTab) {
       case "inbox":
-        return tasks.filter((t) => t.status === "pending");
+        return filtered.filter((t) => t.status === "pending");
       case "ai":
-        return tasks.filter((t) => t.isAI);
+        return filtered.filter((t) => t.isAI);
       case "archive":
-        return tasks.filter((t) => t.status === "done");
+        return filtered.filter((t) => t.status === "done");
       default:
-        return tasks;
+        return filtered;
     }
   };
 
@@ -344,10 +355,10 @@ function TaskListContent() {
   );
 }
 
-export default function TaskList() {
+export default function TaskList({ agentFilter = "all" }: TaskListProps) {
   return (
     <Suspense fallback={<div className="text-center py-12 text-slate-400">Loading...</div>}>
-      <TaskListContent />
+      <TaskListContent agentFilter={agentFilter} />
     </Suspense>
   );
 }
