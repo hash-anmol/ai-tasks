@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import TaskList from "@/components/TaskList";
 import AddTaskButton from "@/components/AddTaskButton";
 import GamificationHeader from "@/components/GamificationHeader";
+import BottomNav from "@/components/BottomNav";
 
 function TabNavigation() {
   const searchParams = useSearchParams();
@@ -51,15 +52,22 @@ function PageContent() {
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab") || "today";
 
+  const getTitle = () => {
+    switch (activeTab) {
+      case "ai": return "AI Tasks";
+      case "inbox": return "Inbox";
+      case "archive": return "Archive";
+      default: return "Today";
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background-light">
       <div className="h-12 w-full bg-white sticky top-0 z-50"></div>
       <GamificationHeader />
       <header className="bg-white border-b border-primary/10 sticky top-12 z-40">
         <div className="px-6 pt-4 pb-2">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {activeTab === "ai" ? "AI Tasks" : activeTab === "inbox" ? "Inbox" : activeTab === "archive" ? "Archive" : "Today"}
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight">{getTitle()}</h1>
           <p className="text-sm text-slate-500 mt-1">Your tasks</p>
         </div>
         <TabNavigation />
@@ -67,26 +75,8 @@ function PageContent() {
       <main className="px-5 py-6 space-y-4 pb-32">
         <TaskList />
       </main>
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-200 px-8 pt-3 pb-8 flex justify-between items-center z-40">
-        <button className="flex flex-col items-center gap-1 text-primary">
-          <span className="material-icons">task_alt</span>
-          <span className="text-[10px] font-bold">Tasks</span>
-        </button>
-        <button className="flex flex-col items-center gap-1 text-slate-400">
-          <span className="material-icons">calendar_today</span>
-          <span className="text-[10px] font-medium">Calendar</span>
-        </button>
-        <div className="w-12"></div>
-        <button className="flex flex-col items-center gap-1 text-slate-400">
-          <span className="material-icons">folder_open</span>
-          <span className="text-[10px] font-medium">Projects</span>
-        </button>
-        <button className="flex flex-col items-center gap-1 text-slate-400">
-          <span className="material-icons">settings</span>
-          <span className="text-[10px] font-medium">Settings</span>
-        </button>
-      </nav>
       <AddTaskButton />
+      <BottomNav />
     </div>
   );
 }
