@@ -30,11 +30,11 @@
 - [ ] Display webhook status in UI
 
 ### Task 3: AI Task Features
-- [ ] Add "AI Task" creation button
-- [ ] Display AI progress bar (pending/working/completed)
-- [ ] Add AI notes section to each task
-- [ ] Show AI status indicator (assigned/in_progress/done)
-- [ ] Display AI thinking/progress updates
+- [x] Add "AI Task" creation button
+- [x] Display AI progress bar (pending/working/completed)
+- [x] Add AI notes section to each task
+- [x] Show AI status indicator (assigned/in_progress/done)
+- [ ] Display AI thinking/progress updates (via webhook)
 
 ### Task 4: GitHub Push
 - [x] Create GitHub repo (already authenticated!)
