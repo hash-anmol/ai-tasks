@@ -44,7 +44,21 @@ export default function SettingsPage() {
       {/* Preferences */}
       <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
         <h3 className="font-bold mb-3">Preferences</h3>
+        
         <div className="flex items-center justify-between py-2">
+          <span className="text-sm">Dark Mode</span>
+          <button
+            className="text-xs text-primary font-medium"
+            onClick={() => {
+              document.documentElement.classList.toggle('dark');
+              localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+            }}
+          >
+            Coming soon
+          </button>
+        </div>
+        
+        <div className="flex items-center justify-between py-2 border-t border-slate-100">
           <span className="text-sm">Notifications</span>
           <button
             onClick={() => setNotifications(!notifications)}
