@@ -31,6 +31,7 @@
 - [x] Created `/api/webhooks/openclaw` endpoint ✅
 - [x] Created OpenClaw client library (`src/lib/openclaw.ts`) ✅
 - [x] Created AGENTS.md documentation ✅
+- [x] Added webhook config to OpenClaw (`hooks.external`) ✅
 - [ ] Configure environment variables (see .env.local.example)
 
 ---
