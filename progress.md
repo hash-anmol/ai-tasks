@@ -162,10 +162,10 @@
 ---
 
 ### Task 10: @Mention System (NEW)
-- [ ] Add mention parsing in comments (@agent-name)
+- [x] Add mention parsing in comments (@agent-name) ✅
 - [ ] Create notifications table in Convex
-- [ ] Agent heartbeat checks mentions
-- [ ] Display unread mention badge
+- [x] Agent heartbeat checks mentions ✅
+- [x] Display unread mention badge ✅
 
 **Testing Plan:**
 - [ ] Test: Type @writer → triggers notification
