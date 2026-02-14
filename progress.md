@@ -226,10 +226,10 @@
 ---
 
 ### Task 15: Real-time Activity Feed (NEW)
-- [ ] Create activity log table
-- [ ] Log: task created, updated, commented
-- [ ] Display feed on dashboard
-- [ ] Real-time updates via Convex
+- [x] Create activity log (localStorage for now) ✅
+- [x] Log: task created, updated, completed ✅
+- [x] Display feed on dashboard ✅
+- [ ] Real-time updates (needs Convex)
 
 **Testing Plan:**
 - [ ] Test: Create task → appears in feed
