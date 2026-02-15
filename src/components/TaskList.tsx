@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
 
 interface Task {
   _id: string;
@@ -18,6 +20,8 @@ interface Task {
   aiNotes?: string;
   aiStatus?: string;
   aiResponse?: string;
+  aiResponseShort?: string;
+  aiBlockers?: string[];
   openclawSessionId?: string;
   createdAt: number;
   updatedAt: number;
@@ -44,28 +48,14 @@ export default function TaskList({ agentFilter = "all" }: { agentFilter?: string
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab") || "today";
   
-  // Get tasks from REST API
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchTasks();
-  }, []);
-
-  const fetchTasks = async () => {
-    try {
-      const res = await fetch('/api/tasks');
-      const data = await res.json();
-      setTasks(data.tasks || []);
-    } catch (error) {
-      console.error("Error fetching tasks:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const tasksQuery = useQuery(api.tasks.getTasks);
+  const isLoading = tasksQuery === undefined;
+  const taskList = tasksQuery || [];
+  const updateTaskStatus = useMutation(api.tasks.updateTaskStatus);
+  const deleteTask = useMutation(api.tasks.deleteTask);
 
   const getFilteredTasks = () => {
-    let filtered = tasks;
+    let filtered = taskList as Task[];
     
     if (agentFilter && agentFilter !== "all") {
       filtered = filtered.filter((t: Task) => t.agent === agentFilter);
@@ -73,7 +63,7 @@ export default function TaskList({ agentFilter = "all" }: { agentFilter?: string
     
     switch (activeTab) {
       case "inbox":
-        return filtered.filter((t: Task) => t.status === "pending");
+        return filtered.filter((t: Task) => t.status === "inbox");
       case "ai":
         return filtered.filter((t: Task) => t.isAI);
       case "archive":
@@ -84,14 +74,9 @@ export default function TaskList({ agentFilter = "all" }: { agentFilter?: string
   };
 
   const handleToggleStatus = async (task: Task) => {
-    const newStatus = task.status === "done" ? "pending" : "done";
+    const newStatus = task.status === "done" ? "inbox" : "done";
     try {
-      await fetch(`/api/tasks?id=${task._id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-      });
-      fetchTasks();
+      await updateTaskStatus({ id: task._id as any, status: newStatus } as any);
     } catch (error) {
       console.error("Error updating task:", error);
     }
@@ -100,20 +85,29 @@ export default function TaskList({ agentFilter = "all" }: { agentFilter?: string
   const handleDelete = async (taskId: string) => {
     if (confirm("Delete this task?")) {
       try {
-        await fetch(`/api/tasks?id=${taskId}`, { method: 'DELETE' });
-        fetchTasks();
+        await deleteTask({ id: taskId as any } as any);
       } catch (error) {
         console.error("Error deleting task:", error);
       }
     }
   };
 
-  const filteredTasks = getFilteredTasks();
-  const pendingTasks = filteredTasks.filter(t => t.status === "pending" && areDependenciesMet(t, tasks));
-  const inProgressTasks = filteredTasks.filter(t => t.status === "in_progress");
-  const doneTasks = filteredTasks.filter(t => t.status === "done");
+  const filteredTasks = getFilteredTasks() as Task[];
+  const activeList = (filteredTasks as Task[]).filter(
+    t => !t.isAI || t.aiStatus !== "blocked"
+  );
+  const pendingTasks = activeList.filter(
+    t => t.status === "inbox" && areDependenciesMet(t, taskList as Task[])
+  );
+  const inProgressTasks = activeList.filter(
+    t => t.status === "in_progress" || t.status === "assigned"
+  );
+  const doneTasks = activeList.filter(t => t.status === "done");
+  const blockedTasks = filteredTasks.filter(
+    t => t.isAI && t.aiStatus === "blocked"
+  );
 
-  if (loading) {
+  if (isLoading) {
     return <div className="p-4 text-center text-slate-500">Loading tasks...</div>;
   }
 
@@ -173,12 +167,30 @@ export default function TaskList({ agentFilter = "all" }: { agentFilter?: string
         </div>
       )}
 
-      {filteredTasks.length === 0 && (
-        <div className="text-center py-12">
-          <span className="material-icons text-4xl text-slate-300">task_alt</span>
-          <p className="text-slate-500 mt-2">No tasks yet</p>
+      {blockedTasks.length > 0 && (
+        <div>
+          <h3 className="text-xs font-bold text-red-500 uppercase tracking-wider mb-3">
+            Blocked ({blockedTasks.length})
+          </h3>
+          <div className="space-y-2">
+            {blockedTasks.map((task) => (
+              <TaskCard
+                key={task._id}
+                task={task}
+                onToggle={handleToggleStatus}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
         </div>
       )}
+
+       {filteredTasks.length === 0 && (
+         <div className="text-center py-12">
+           <span className="material-icons text-4xl text-slate-300">task_alt</span>
+           <p className="text-slate-500 mt-2">No tasks yet</p>
+         </div>
+       )}
     </div>
   );
 }
@@ -251,13 +263,18 @@ function TaskCard({ task, onToggle, onDelete }: {
             )}
 
             {/* AI Response */}
-            {task.aiResponse && (
+            {(task.aiResponse || task.aiResponseShort) && (
               <details className="mt-2">
-                <summary className="text-xs text-slate-500 cursor-pointer">View AI Response</summary>
+                <summary className="text-xs text-slate-500 cursor-pointer">View AI Result</summary>
                 <pre className="mt-1 p-2 bg-slate-50 rounded text-xs whitespace-pre-wrap max-h-40 overflow-y-auto">
-                  {task.aiResponse}
+                  {task.aiResponse || task.aiResponseShort}
                 </pre>
               </details>
+            )}
+            {task.aiBlockers && task.aiBlockers.length > 0 && (
+              <div className="mt-2 text-xs text-red-600">
+                Blocked: {task.aiBlockers.join("; ")}
+              </div>
             )}
             
             <div className="flex items-center gap-2 mt-2">

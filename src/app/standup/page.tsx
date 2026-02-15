@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import BottomNav from "@/components/BottomNav";
+import { useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
 
 interface Task {
   _id: string;
@@ -9,48 +11,46 @@ interface Task {
   status: string;
   agent?: string;
   dependsOn?: string[];
-  updatedAt: string;
+  updatedAt: number;
+  aiStatus?: string;
+  aiBlockers?: string[];
 }
 
 export default function StandupPage() {
   const [completed, setCompleted] = useState<Task[]>([]);
   const [inProgress, setInProgress] = useState<Task[]>([]);
   const [blocked, setBlocked] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const tasksQuery = useQuery(api.tasks.getTasks);
+  const isLoading = tasksQuery === undefined;
+  const tasks = tasksQuery || [];
 
   useEffect(() => {
-    const stored = localStorage.getItem("ai-tasks");
-    if (stored) {
-      const tasks: Task[] = JSON.parse(stored);
-      const now = new Date();
-      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    if (isLoading) return;
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-      // Completed yesterday
-      const completedTasks = tasks.filter(t => {
-        const updated = new Date(t.updatedAt);
-        return t.status === "done" && updated >= yesterday;
+    const completedTasks = (tasks as Task[]).filter((t: Task) => {
+      const updated = new Date(t.updatedAt);
+      return t.status === "done" && updated >= yesterday;
+    });
+    setCompleted(completedTasks);
+
+    const inProgressTasks = (tasks as Task[]).filter(
+      (t: Task) => t.status === "in_progress" || t.status === "assigned"
+    );
+    setInProgress(inProgressTasks);
+
+    const blockedTasks = (tasks as Task[]).filter((t: Task) => {
+      if (t.aiStatus === "blocked") return true;
+      if (!t.dependsOn || t.dependsOn.length === 0) return false;
+      return !t.dependsOn.every((depId) => {
+        const depTask = (tasks as Task[]).find((task: Task) => task._id === depId);
+        return depTask?.status === "done";
       });
-      setCompleted(completedTasks);
-
-      // In progress
-      const inProgressTasks = tasks.filter(t => 
-        t.status === "in_progress" || t.status === "assigned"
-      );
-      setInProgress(inProgressTasks);
-
-      // Blocked
-      const blockedTasks = tasks.filter(t => {
-        if (!t.dependsOn || t.dependsOn.length === 0) return false;
-        return !t.dependsOn.every(depId => {
-          const depTask = tasks.find(task => task._id === depId);
-          return depTask?.status === "done";
-        });
-      });
-      setBlocked(blockedTasks);
-    }
-    setLoading(false);
-  }, []);
+    });
+    setBlocked(blockedTasks);
+  }, [isLoading, tasks]);
 
   const getFormattedMessage = () => {
     const now = new Date();
@@ -77,7 +77,8 @@ export default function StandupPage() {
 
     message += `🚧 *Blockers* (${blocked.length})\n`;
     blocked.forEach(t => {
-      message += `• ${t.title} — blocked\n`;
+      const blockerText = t.aiBlockers && t.aiBlockers.length > 0 ? ` — ${t.aiBlockers.join("; ")}` : " — blocked";
+      message += `• ${t.title}${blockerText}\n`;
     });
     if (blocked.length === 0) message += `_No blockers! 🎉_\n`;
 
@@ -90,7 +91,7 @@ export default function StandupPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background-light flex items-center justify-center">
         <div className="text-slate-400">Loading...</div>

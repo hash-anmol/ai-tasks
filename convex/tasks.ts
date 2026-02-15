@@ -105,6 +105,10 @@ export const updateTask = mutation({
     aiStatus: v.optional(v.string()),
     aiProgress: v.optional(v.number()),
     aiResponse: v.optional(v.string()),
+    aiResponseShort: v.optional(v.string()),
+    aiBlockers: v.optional(v.array(v.string())),
+    openclawSessionId: v.optional(v.string()),
+    openclawTaskId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -123,6 +127,7 @@ export const updateAIProgress = mutation({
     aiProgress: v.number(),
     aiResponse: v.optional(v.string()),
     aiResponseShort: v.optional(v.string()),
+    aiBlockers: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;

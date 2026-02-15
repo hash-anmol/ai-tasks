@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useGamification } from "@/hooks/useGamification";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
 
 type TaskStatus = "inbox" | "assigned" | "in_progress" | "review" | "done";
 
@@ -9,19 +11,21 @@ interface Task {
   _id: string;
   title: string;
   description?: string;
-  status: TaskStatus;
-  priority?: "low" | "medium" | "high";
-  dueDate?: string;
+  status: string;
+  priority?: string;
+  dueDate?: number;
   tags: string[];
   isAI: boolean;
-  agent?: "researcher" | "writer" | "editor" | "coordinator";
+  agent?: string;
   dependsOn?: string[];
   aiProgress?: number;
   aiNotes?: string;
-  aiStatus?: "assigned" | "working" | "completed";
+  aiStatus?: string;
+  aiResponse?: string;
+  aiBlockers?: string[];
   openclawTaskId?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 const COLUMNS: { id: TaskStatus; label: string; color: string }[] = [
@@ -51,30 +55,14 @@ const areDependenciesMet = (task: Task, allTasks: Task[]): boolean => {
 };
 
 export default function KanbanBoard() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const tasksQuery = useQuery(api.tasks.getTasks);
+  const isLoading = tasksQuery === undefined;
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
   const { completeTask } = useGamification();
+  const updateTaskStatus = useMutation(api.tasks.updateTaskStatus);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("ai-tasks");
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      // Migrate old status to new format
-      const migrated = parsed.map((t: any) => ({
-        ...t,
-        status: t.status === "pending" ? "inbox" : t.status === "done" ? "done" : t.status || "inbox"
-      }));
-      setTasks(migrated);
-    }
-    setIsLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem("ai-tasks", JSON.stringify(tasks));
-    }
-  }, [tasks, isLoading]);
+  const taskList = (tasksQuery || []) as Task[];
+  const kanbanTasks = taskList;
 
   const handleDragStart = (taskId: string) => {
     setDraggedTask(taskId);
@@ -87,31 +75,30 @@ export default function KanbanBoard() {
   const handleDrop = (columnId: TaskStatus) => {
     if (!draggedTask) return;
     
-    const task = tasks.find(t => t._id === draggedTask);
+    const task = kanbanTasks.find(t => t._id === draggedTask);
     if (!task) return;
     
     // Prevent moving to done if dependencies aren't met
-    if (columnId === "done" && !areDependenciesMet(task, tasks)) {
+    if (columnId === "done" && !areDependenciesMet(task, kanbanTasks)) {
       setDraggedTask(null);
       return;
     }
-    
-    setTasks(prev => prev.map(task => {
-      if (task._id === draggedTask) {
-        const wasDone = task.status === "done";
-        const nowDone = columnId === "done";
-        if (!wasDone && nowDone) {
-          completeTask();
-        }
-        return { ...task, status: columnId, updatedAt: new Date().toISOString() };
+
+    try {
+      const wasDone = task.status === "done";
+      const nowDone = columnId === "done";
+      if (!wasDone && nowDone) {
+        completeTask();
       }
-      return task;
-    }));
+      updateTaskStatus({ id: task._id as any, status: columnId } as any);
+    } catch (error) {
+      console.error("Error updating status:", error);
+    }
     setDraggedTask(null);
   };
 
   const getTasksByColumn = (columnId: TaskStatus) => {
-    return tasks.filter(t => t.status === columnId);
+    return kanbanTasks.filter(t => t.status === columnId);
   };
 
   if (isLoading) {
@@ -137,18 +124,18 @@ export default function KanbanBoard() {
             {getTasksByColumn(column.id).map(task => (
               <div
                 key={task._id}
-                draggable={areDependenciesMet(task, tasks)}
+                draggable={areDependenciesMet(task, kanbanTasks)}
                 onDragStart={() => handleDragStart(task._id)}
                 className={`bg-white rounded-lg p-3 shadow-sm border border-slate-100 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow ${
                   draggedTask === task._id ? "opacity-50" : ""
-                } ${!areDependenciesMet(task, tasks) ? 'opacity-60 border-l-4 border-l-red-400' : ''}`}
+                } ${!areDependenciesMet(task, kanbanTasks) ? 'opacity-60 border-l-4 border-l-red-400' : ''}`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <h4 className={`font-medium text-sm ${!areDependenciesMet(task, tasks) ? 'text-slate-400' : 'text-slate-800'}`}>
+                  <h4 className={`font-medium text-sm ${!areDependenciesMet(task, kanbanTasks) ? 'text-slate-400' : 'text-slate-800'}`}>
                     {task.title}
                   </h4>
                   <div className="flex gap-1 flex-shrink-0">
-                    {!areDependenciesMet(task, tasks) && (
+                    {!areDependenciesMet(task, kanbanTasks) && (
                       <span className="text-[10px] px-1 py-0.5 rounded bg-red-100 text-red-700 font-bold">🔒</span>
                     )}
                     {task.agent && (
@@ -171,7 +158,7 @@ export default function KanbanBoard() {
                   </div>
                 )}
                 
-                {task.isAI && task.aiStatus === 'working' && (
+                {task.isAI && task.aiStatus === 'running' && (
                   <div className="mt-2 flex items-center gap-2">
                     <div className="flex gap-0.5">
                       <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
@@ -192,12 +179,12 @@ export default function KanbanBoard() {
                       {task.priority}
                     </span>
                   )}
-                  {task.dueDate && (
-                    <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                      <span className="material-icons text-xs">schedule</span>
-                      {task.dueDate}
-                    </span>
-                  )}
+                {task.dueDate && (
+                  <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                    <span className="material-icons text-xs">schedule</span>
+                    {new Date(task.dueDate).toLocaleDateString()}
+                  </span>
+                )}
                 </div>
               </div>
             ))}

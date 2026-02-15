@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
+import { useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
 
 interface Task {
   _id: string;
@@ -16,16 +18,10 @@ interface Task {
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [results, setResults] = useState<Task[]>([]);
   const router = useRouter();
-
-  useEffect(() => {
-    const stored = localStorage.getItem("ai-tasks");
-    if (stored) {
-      setTasks(JSON.parse(stored));
-    }
-  }, []);
+  const tasksQuery = useQuery(api.tasks.getTasks);
+  const tasks = (tasksQuery || []) as Task[];
 
   useEffect(() => {
     if (query.trim()) {

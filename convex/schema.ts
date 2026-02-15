@@ -17,6 +17,7 @@ export default defineSchema({
     aiProgress: v.optional(v.number()),
     aiResponse: v.optional(v.string()),
     aiResponseShort: v.optional(v.string()),
+    aiBlockers: v.optional(v.array(v.string())),
     scheduledAt: v.optional(v.number()),
     dependsOn: v.optional(v.array(v.string())),
     createdAt: v.number(),
@@ -32,6 +33,7 @@ export default defineSchema({
     progress: v.number(),
     startedAt: v.number(),
     completedAt: v.optional(v.number()),
+    blockers: v.optional(v.array(v.string())),
   }),
 
   activities: defineTable({

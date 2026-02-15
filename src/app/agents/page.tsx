@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
+import { useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
 
 interface AgentStats {
   id: string;
@@ -13,6 +15,27 @@ interface AgentStats {
   tasksCompleted: number;
 }
 
+interface AgentRun {
+  _id: string;
+  taskId?: string;
+  agent: string;
+  status: string;
+  prompt: string;
+  response?: string;
+  progress: number;
+  startedAt: number;
+  completedAt?: number;
+  blockers?: string[];
+}
+
+interface Task {
+  _id: string;
+  title: string;
+  agent?: string;
+  aiStatus?: string;
+  status?: string;
+}
+
 const AGENTS_CONFIG = [
   { id: "researcher", name: "Researcher", emoji: "🔍", color: "bg-blue-500" },
   { id: "writer", name: "Writer", emoji: "✍️", color: "bg-purple-500" },
@@ -22,13 +45,15 @@ const AGENTS_CONFIG = [
 
 export default function AgentsPage() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const tasks = (useQuery(api.tasks.getTasks) || []) as Task[];
+  const runs = (useQuery(api.agentRuns.getAgentRuns) || []) as AgentRun[];
 
-  // Get agent stats - for now static, will connect to API later
   const getAgentStats = (): AgentStats[] => {
     return AGENTS_CONFIG.map((agent) => ({
       ...agent,
-      status: "idle" as const,
-      tasksCompleted: 0,
+      status: getAgentStatus(agent.id, runs),
+      currentTask: getAgentCurrentTask(agent.id, tasks),
+      tasksCompleted: runs.filter((run) => run.agent === agent.id && run.status === "completed").length,
     }));
   };
 
@@ -49,6 +74,27 @@ export default function AgentsPage() {
       default: return "Idle";
     }
   };
+
+  const getAgentRuns = (agentId: string) =>
+    runs.filter((run: AgentRun) => run.agent === agentId);
+
+  const findTaskTitle = (taskId?: string) =>
+    tasks.find((task: Task) => task._id === taskId)?.title;
+
+  function getAgentStatus(agentId: string, agentRuns: AgentRun[]): AgentStats["status"] {
+    const blocked = agentRuns.some((run) => run.agent === agentId && run.status === "blocked");
+    if (blocked) return "blocked";
+    const active = agentRuns.some((run) => run.agent === agentId && run.status === "running");
+    if (active) return "active";
+    return "idle";
+  }
+
+  function getAgentCurrentTask(agentId: string, agentTasks: Task[]) {
+    const activeTask = agentTasks.find(
+      (task) => task.agent === agentId && (task.aiStatus === "running" || task.status === "in_progress")
+    );
+    return activeTask?.title;
+  }
 
   return (
     <div className="min-h-screen bg-background-light p-5 pb-24">
@@ -94,8 +140,37 @@ export default function AgentsPage() {
           <h2 className="font-bold text-lg mb-3">
             {AGENTS_CONFIG.find(a => a.id === selectedAgent)?.emoji} {AGENTS_CONFIG.find(a => a.id === selectedAgent)?.name}'s Tasks
           </h2>
-          <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-            <p className="text-slate-400 text-sm">No tasks assigned</p>
+          <div className="space-y-3">
+            {getAgentRuns(selectedAgent).length === 0 ? (
+              <div className="bg-white rounded-xl p-4 shadow-sm text-center">
+                <p className="text-slate-400 text-sm">No runs yet</p>
+              </div>
+            ) : (
+              getAgentRuns(selectedAgent).map((run: AgentRun) => (
+                <div key={run._id} className="bg-white rounded-xl p-4 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm font-semibold text-slate-800">
+                      {findTaskTitle(run.taskId) || "Unlinked task"}
+                    </div>
+                    <span className="text-xs text-slate-400">
+                      {run.status}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500 mb-2">Progress: {run.progress}%</div>
+                  <details>
+                    <summary className="text-xs text-slate-500 cursor-pointer">View result</summary>
+                    <pre className="mt-1 p-2 bg-slate-50 rounded text-xs whitespace-pre-wrap max-h-40 overflow-y-auto">
+                      {run.response || run.prompt}
+                    </pre>
+                  </details>
+                  {run.blockers && run.blockers.length > 0 && (
+                    <div className="mt-2 text-xs text-red-600">
+                      Blocked: {run.blockers.join("; ")}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

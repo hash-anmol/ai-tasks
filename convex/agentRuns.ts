@@ -58,6 +58,7 @@ export const updateAgentRun = mutation({
     response: v.optional(v.string()),
     progress: v.optional(v.number()),
     completedAt: v.optional(v.number()),
+    blockers: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -72,12 +73,14 @@ export const completeAgentRun = mutation({
     status: v.string(),
     response: v.string(),
     progress: v.number(),
+    blockers: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, {
       status: args.status,
       response: args.response,
       progress: args.progress,
+      blockers: args.blockers,
       completedAt: Date.now(),
     });
   },

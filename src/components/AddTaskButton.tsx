@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
 
 interface Task {
   _id: string;
@@ -20,7 +22,10 @@ interface Task {
 }
 
 const AGENTS = [
-  { id: "main", name: "Main Agent", emoji: "🤖", color: "bg-primary" },
+  { id: "researcher", name: "Researcher", emoji: "🔍", color: "bg-blue-500" },
+  { id: "writer", name: "Writer", emoji: "✍️", color: "bg-purple-500" },
+  { id: "editor", name: "Editor", emoji: "📝", color: "bg-orange-500" },
+  { id: "coordinator", name: "Coordinator", emoji: "🎯", color: "bg-green-500" },
 ];
 
 export default function AddTaskButton() {
@@ -33,19 +38,8 @@ export default function AddTaskButton() {
   const [agent, setAgent] = useState<string | undefined>(undefined);
   const [dependsOn, setDependsOn] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [existingTasks, setExistingTasks] = useState<Task[]>([]);
-
-  // Fetch existing tasks for dependencies
-  useEffect(() => {
-    if (isOpen) {
-      fetch('/api/tasks')
-        .then(res => res.json())
-        .then(data => {
-          setExistingTasks((data.tasks || []).filter((t: Task) => t.status !== "done"));
-        })
-        .catch(console.error);
-    }
-  }, [isOpen]);
+  const existingTasks = (useQuery(api.tasks.getTasks) || []) as Task[];
+  const createTask = useMutation(api.tasks.createTask);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,36 +49,28 @@ export default function AddTaskButton() {
     setIsSubmitting(true);
 
     try {
-      // Create task via REST API
-      const res = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || undefined,
-          status: "pending",
-          priority,
-          dueDate: dueDate ? new Date(dueDate).getTime() : undefined,
-          tags: [],
-          isAI,
-          agent: isAI ? agent : undefined,
-          dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
-        }),
-      });
+      const taskId = await createTask({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        status: isAI ? "assigned" : "inbox",
+        priority,
+        dueDate: dueDate ? new Date(dueDate).getTime() : undefined,
+        tags: [],
+        isAI,
+        agent: isAI ? agent : undefined,
+        dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
+      } as any);
 
-      const data = await res.json();
-
-      // If AI task, queue for OpenClaw to pick up
-      if (isAI && data._id) {
+      if (isAI && taskId) {
         try {
-          await fetch("/api/openclaw/queue", {
+          await fetch("/api/openclaw/execute", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               title: title.trim(),
               description: description.trim(),
               agent,
-              taskId: data._id,
+              taskId,
             }),
           });
           console.log("✅ Task queued for AI agent:", agent);
@@ -101,9 +87,6 @@ export default function AddTaskButton() {
       setAgent(undefined);
       setDependsOn([]);
       setIsOpen(false);
-      
-      // Refresh the page to show new task
-      window.location.reload();
     } catch (err) {
       console.error("Error creating task:", err);
     } finally {
@@ -224,7 +207,9 @@ export default function AddTaskButton() {
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-2">Depends on (optional)</label>
                   <div className="flex flex-wrap gap-2">
-                    {existingTasks.map((task: Task) => (
+                    {existingTasks
+                      .filter((task: Task) => task.status !== "done")
+                      .map((task: Task) => (
                       <button
                         key={task._id}
                         type="button"
