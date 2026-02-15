@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       }, { skipQueue: true } as any);
     }
 
-    // Try to execute via OpenClaw
+    // Try to execute via OpenClaw chat completions API
     try {
       let response: Response | null = null;
       let lastError: Error | null = null;
@@ -50,21 +50,21 @@ export async function POST(request: NextRequest) {
 
       for (const baseUrl of getOpenClawUrls()) {
         try {
-          response = await fetch(`${baseUrl}/api/sessions`, {
+          // Use OpenAI-compatible /v1/chat/completions endpoint
+          response = await fetch(`${baseUrl}/v1/chat/completions`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               ...(process.env.OPENCLAW_TOKEN && {
                 "Authorization": `Bearer ${process.env.OPENCLAW_TOKEN}`
               }),
+              "x-openclaw-agent-id": agent || "main",
             },
             body: JSON.stringify({
-              message: prompt,
-              agent: agent || "main",
-              sessionTarget: "isolated",
-              metadata: { taskId },
+              model: "openclaw",
+              messages: [{ role: "user", content: prompt }],
             }),
-            signal: AbortSignal.timeout(10000),
+            signal: AbortSignal.timeout(60000), // 60s timeout for agent execution
           });
           resolvedUrl = baseUrl;
           break;
@@ -79,26 +79,30 @@ export async function POST(request: NextRequest) {
 
       if (response.ok) {
         const result = await response.json();
-        console.log("✅ OpenClaw session created:", result.sessionId);
+        const assistantMessage = result.choices?.[0]?.message?.content || "";
+        console.log("✅ OpenClaw response received:", assistantMessage.slice(0, 100));
+        
         if (convex && taskId) {
-          await convexMutation(api.tasks.linkOpenClawSession, {
+          await convexMutation(api.tasks.updateAIProgress, {
             id: taskId,
-            openclawSessionId: result.sessionId,
-            openclawTaskId: result.taskId,
-            aiStatus: "running",
+            aiStatus: "completed",
+            aiProgress: 100,
+            aiResponse: assistantMessage,
+            aiResponseShort: assistantMessage.slice(0, 200),
           });
           if (runId) {
             await convexMutation(api.agentRuns.updateAgentRun, {
               id: runId,
-              status: "running",
+              status: "completed",
+              response: assistantMessage,
             });
           }
         }
         return NextResponse.json({
           success: true,
-          sessionId: result.sessionId,
-          status: "running",
-          message: "Task sent to AI agent",
+          status: "completed",
+          response: assistantMessage,
+          message: "Task completed by AI agent",
         });
       } else {
         const error = await response.text();
@@ -108,7 +112,7 @@ export async function POST(request: NextRequest) {
             id: taskId,
             aiStatus: "blocked",
             aiProgress: 0,
-            aiResponseShort: "OpenClaw not reachable. Check public URL.",
+            aiResponseShort: "OpenClaw error",
             aiBlockers: [
               `OpenClaw error from ${resolvedUrl || "unknown"}: ${error || "fetch failed"}`,
             ],
@@ -120,11 +124,10 @@ export async function POST(request: NextRequest) {
             });
           }
         }
-        // Return success anyway - task is created, agent will run when reachable
         return NextResponse.json({
           success: true,
           status: "blocked",
-          message: "Task created. AI agent blocked (OpenClaw not reachable)."
+          message: "Task created. AI agent blocked (OpenClaw error)."
         });
       }
     } catch (openClawError: any) {
@@ -146,7 +149,6 @@ export async function POST(request: NextRequest) {
           });
         }
       }
-      // Return success - task is created, will execute later
       return NextResponse.json({
         success: true,
         status: "blocked",

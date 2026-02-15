@@ -45,3 +45,13 @@
 - For persistent storage: run `npx convex dev` locally
 
 ## Test Date: 2026-02-15
+
+## Recent Fixes (2026-02-15 16:30)
+- Fixed duplicate route handlers in `/api/openclaw/queue/route.ts`
+- Updated ngrok URL in Vercel env var (old: 379a..., new: 2e9f...)
+- Cleared 5 blocked AI tasks from Convex DB that had stale error messages
+
+## Current Status
+- Ngrok tunnel running: https://2e9f-2405-201-400b-e8da-97e6-7cfe-a8dc-35e2.ngrok-free.app
+- Vercel app: https://ai-tasks-zeta.vercel.app
+- All blocked tasks cleared, ready for new AI task execution
