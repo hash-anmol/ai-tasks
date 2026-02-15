@@ -1,22 +1,58 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #13ec5b;
-  --color-background-light: #f6f8f6;
-  --color-background-dark: #102216;
+  --color-primary: #111827;
+  --color-background-light: #FFFFFF;
+  --color-background-dark: #121212;
+  --color-surface-light: #FFFFFF;
+  --color-surface-dark: #1E1E1E;
+  --color-text-primary-light: #111827;
+  --color-text-primary-dark: #E8EAED;
+  --color-text-secondary-light: #9CA3AF;
+  --color-text-secondary-dark: #9AA0A6;
+  --color-accent: #3B82F6;
+  --color-border-light: #E5E7EB;
+  --color-border-dark: #3C4043;
 }
 
 :root {
-  --primary: #13ec5b;
-  --background-light: #f6f8f6;
-  --background-dark: #102216;
+  --primary: #111827;
+  --background: #FFFFFF;
+  --surface: #FFFFFF;
+  --text-primary: #111827;
+  --text-secondary: #9CA3AF;
+  --border: #E5E7EB;
+}
+
+.dark {
+  --background: #121212;
+  --surface: #1E1E1E;
+  --text-primary: #E8EAED;
+  --text-secondary: #9AA0A6;
+  --border: #3C4043;
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-inter), 'Inter', sans-serif;
   -webkit-tap-highlight-color: transparent;
+  background-color: var(--background);
+  color: var(--text-primary);
+  overflow: hidden;
+  height: 100dvh;
+  min-height: 100dvh;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* Font utilities */
+.font-display {
+  font-family: var(--font-merriweather), 'Merriweather', serif;
+}
+
+.font-body {
+  font-family: var(--font-inter), 'Inter', sans-serif;
+}
+
+/* Scrollbar hiding */
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -26,7 +62,55 @@ body {
   scrollbar-width: none;
 }
 
-/* Coin animation */
+/* Footer cutout mask for FAB */
+.footer-cutout {
+  mask-image: radial-gradient(circle 42px at center top, transparent 40px, black 41px);
+  -webkit-mask-image: radial-gradient(circle 42px at center top, transparent 40px, black 41px);
+}
+
+/* Glass highlight shadow */
+.shadow-glass-highlight {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* Soft floating shadow */
+.shadow-fab {
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+.dark .shadow-fab {
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+/* Subtle glow for blocked items */
+.shadow-glow-red {
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+/* Google Plus icon styling */
+.g-v-top { position: absolute; top: 0; left: 50%; width: 4px; height: 10px; background: #EA4335; transform: translateX(-50%); }
+.g-v-bottom { position: absolute; bottom: 0; left: 50%; width: 4px; height: 10px; background: #34A853; transform: translateX(-50%); }
+.g-h-left { position: absolute; top: 50%; left: 0; width: 10px; height: 4px; background: #FBBC05; transform: translateY(-50%); }
+.g-h-right { position: absolute; top: 50%; right: 0; width: 10px; height: 4px; background: #4285F4; transform: translateY(-50%); }
+
+/* Ambient background gradients */
+.ambient-gradient-blue {
+  background: radial-gradient(circle, rgba(219, 234, 254, 0.3) 0%, transparent 70%);
+}
+
+.ambient-gradient-rose {
+  background: radial-gradient(circle, rgba(254, 226, 226, 0.3) 0%, transparent 70%);
+}
+
+.dark .ambient-gradient-blue {
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%);
+}
+
+.dark .ambient-gradient-rose {
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.06) 0%, transparent 70%);
+}
+
+/* Coin animation (kept for gamification hook compatibility) */
 @keyframes coin-flip {
   0% { transform: rotateY(0deg); }
   50% { transform: rotateY(180deg); }
@@ -43,7 +127,7 @@ body {
   animation: coin-pop 0.4s ease-out forwards;
 }
 
-/* Streak flame animation */
+/* Streak flame animation (kept for gamification hook compatibility) */
 @keyframes flame {
   0%, 100% { transform: scale(1) rotate(-2deg); }
   50% { transform: scale(1.1) rotate(2deg); }
@@ -53,7 +137,7 @@ body {
   animation: flame 0.5s ease-in-out infinite;
 }
 
-/* Confetti */
+/* Confetti (kept for gamification hook compatibility) */
 @keyframes confetti-fall {
   0% { transform: translateY(-100%) rotate(0deg); opacity: 1; }
   100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
@@ -66,4 +150,84 @@ body {
   animation: confetti-fall 3s ease-out forwards;
   pointer-events: none;
   z-index: 9999;
+}
+
+/* ============================
+   Voice Mode Animations
+   ============================ */
+
+/* Background subtle gradient for voice mode */
+.voice-mode-bg {
+  background: var(--background);
+}
+
+/* Pulse ring - expanding circles around the record button */
+@keyframes voice-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.8);
+    opacity: 0;
+  }
+}
+
+.voice-pulse-ring {
+  animation: voice-pulse 2s ease-out infinite;
+}
+
+.voice-pulse-ring-delayed {
+  animation: voice-pulse 2s ease-out infinite;
+  animation-delay: 0.6s;
+}
+
+/* Spinning ring for processing state */
+@keyframes voice-spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.voice-spin {
+  animation: voice-spin 1.2s linear infinite;
+}
+
+/* Breathing effect for speaking state */
+@keyframes voice-breathe {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.15);
+    opacity: 0.7;
+  }
+}
+
+.voice-breathe {
+  animation: voice-breathe 1.5s ease-in-out infinite;
+}
+
+/* Smooth fade-in for the voice mode overlay */
+@keyframes voice-mode-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.voice-mode-bg {
+  animation: voice-mode-enter 0.3s ease-out;
+}
+
+/* Line clamp utility */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

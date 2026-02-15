@@ -39,8 +39,8 @@ export default function TabNavigation() {
           onClick={() => handleTabClick(tab.id)}
           className={`pb-3 border-b-2 whitespace-nowrap text-sm font-medium transition-colors ${
             activeTab === tab.id
-              ? "border-primary text-primary"
-              : "border-transparent text-slate-400 hover:text-slate-600"
+              ? "border-[var(--text-primary)] text-[var(--text-primary)]"
+              : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
           }`}
         >
           {tab.label}

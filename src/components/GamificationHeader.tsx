@@ -10,12 +10,12 @@ export default function GamificationHeader() {
   const xpProgress = getXPProgress();
 
   return (
-    <div className="bg-white border-b border-slate-200 px-4 py-2">
+    <div className="bg-[var(--surface)] border-b border-[var(--border)] px-4 py-2">
       <div className="flex items-center justify-between">
         {/* Coins */}
         <div className="flex items-center gap-1.5">
           <span className="text-xl">🪙</span>
-          <span className="font-bold text-slate-800">{stats.coins}</span>
+          <span className="font-bold text-[var(--text-primary)]">{stats.coins}</span>
         </div>
 
         {/* Streak */}
@@ -23,8 +23,8 @@ export default function GamificationHeader() {
           <span className={`text-xl ${stats.streak > 0 ? "animate-flame" : ""}`}>
             {stats.streak >= 7 ? "🔥" : stats.streak > 0 ? "💪" : "❄️"}
           </span>
-          <span className="font-bold text-slate-800">{stats.streak}</span>
-          <span className="text-xs text-slate-500">day{stats.streak !== 1 ? "s" : ""}</span>
+          <span className="font-bold text-[var(--text-primary)]">{stats.streak}</span>
+          <span className="text-xs text-[var(--text-secondary)]">day{stats.streak !== 1 ? "s" : ""}</span>
         </div>
 
         {/* Level */}
@@ -36,7 +36,8 @@ export default function GamificationHeader() {
                 cx="20"
                 cy="20"
                 r="16"
-                stroke="#e2e8f0"
+                stroke="currentColor"
+                className="text-[var(--border)]"
                 strokeWidth="3"
                 fill="none"
               />
@@ -52,7 +53,7 @@ export default function GamificationHeader() {
               />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-sm font-bold text-slate-800">Lv.{stats.level}</span>
+              <span className="text-sm font-bold text-[var(--text-primary)]">Lv.{stats.level}</span>
             </div>
           </div>
         </div>
@@ -60,11 +61,11 @@ export default function GamificationHeader() {
 
       {/* XP Bar */}
       <div className="mt-2">
-        <div className="flex justify-between text-xs text-slate-500 mb-1">
+        <div className="flex justify-between text-xs text-[var(--text-secondary)] mb-1">
           <span>XP</span>
           <span>{stats.xp % XP_PER_LEVEL} / {XP_PER_LEVEL}</span>
         </div>
-        <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-primary to-green-400 rounded-full transition-all duration-500"
             style={{ width: `${xpProgress * 100}%` }}

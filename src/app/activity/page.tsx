@@ -37,11 +37,11 @@ export default function ActivityPage() {
 
   const getActivityColor = (type: Activity["type"]) => {
     switch (type) {
-      case "created": return "bg-blue-100 text-blue-700";
-      case "updated": return "bg-yellow-100 text-yellow-700";
-      case "completed": return "bg-green-100 text-green-700";
-      case "commented": return "bg-purple-100 text-purple-700";
-      default: return "bg-slate-100 text-slate-700";
+      case "created": return "bg-blue-500/10 text-blue-500";
+      case "updated": return "bg-yellow-500/10 text-yellow-500";
+      case "completed": return "bg-green-500/10 text-green-500";
+      case "commented": return "bg-purple-500/10 text-purple-500";
+      default: return "bg-[var(--border)] text-[var(--text-primary)]";
     }
   };
 
@@ -61,39 +61,39 @@ export default function ActivityPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background-light p-5 pb-24">
+    <div className="min-h-screen bg-[var(--background)] p-5 pb-24 text-[var(--text-primary)]">
       <h1 className="text-2xl font-bold mb-2">Activity</h1>
-      <p className="text-sm text-slate-500 mb-6">Recent updates across all tasks</p>
+      <p className="text-sm text-[var(--text-secondary)] mb-6">Recent updates across all tasks</p>
 
       {activities.length === 0 ? (
         <div className="text-center py-12">
-          <span className="material-icons text-4xl text-slate-300 mb-2">history</span>
-          <p className="text-slate-400">No activity yet</p>
-          <p className="text-xs text-slate-400 mt-1">Create or complete tasks to see activity</p>
+          <span className="material-icons text-4xl text-[var(--border)] mb-2 opacity-50">history</span>
+          <p className="text-[var(--text-secondary)]">No activity yet</p>
+          <p className="text-xs text-[var(--text-secondary)] mt-1 opacity-60">Create or complete tasks to see activity</p>
         </div>
       ) : (
         <div className="space-y-3">
           {activities.map((activity) => (
-            <div key={activity.id} className="bg-white rounded-xl p-4 shadow-sm">
+            <div key={activity.id} className="bg-[var(--surface)] rounded-xl p-4 border border-[var(--border)] shadow-sm">
               <div className="flex items-start gap-3">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${getActivityColor(activity.type)}`}>
                   {getActivityIcon(activity.type)}
                 </div>
                 <div className="flex-grow">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-sm text-slate-800">
+                    <span className="font-medium text-sm text-[var(--text-primary)]">
                       {activity.type === "completed" ? "Completed" : 
                        activity.type === "created" ? "Created" :
                        activity.type === "updated" ? "Updated" : "Commented on"}
                     </span>
-                    <span className="text-xs text-slate-400">{formatTime(activity.timestamp)}</span>
+                    <span className="text-xs text-[var(--text-secondary)] opacity-60">{formatTime(activity.timestamp)}</span>
                   </div>
-                  <p className="text-sm text-slate-700">{activity.taskTitle}</p>
+                  <p className="text-sm text-[var(--text-primary)] opacity-90">{activity.taskTitle}</p>
                   {activity.details && (
-                    <p className="text-xs text-slate-500 mt-1">{activity.details}</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1 opacity-80">{activity.details}</p>
                   )}
                   {activity.agent && (
-                    <span className="text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-500 mt-1 inline-block">
+                    <span className="text-xs bg-[var(--background)] px-2 py-0.5 rounded text-[var(--text-secondary)] mt-1 inline-block border border-[var(--border)]">
                       {activity.agent}
                     </span>
                   )}

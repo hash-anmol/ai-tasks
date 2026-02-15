@@ -1,10 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// In-memory queue for AI tasks
-let pendingTasks: any[] = [];
+const TASKS_API_URL = process.env.TASKS_API_URL || "https://ai-tasks-zeta.vercel.app/api/tasks";
 
 export async function GET() {
-  return NextResponse.json({ pendingTasks, count: pendingTasks.length });
+  try {
+    // Fetch from the tasks REST API
+    const response = await fetch(TASKS_API_URL, { 
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
+    
+    if (!response.ok) {
+      return NextResponse.json({ pendingTasks: [], count: 0 });
+    }
+    
+    const data = await response.json();
+    const allTasks = data.tasks || [];
+    
+    // Filter for AI tasks with pending status
+    const pending = allTasks
+      .filter((t: any) => t.isAI && (t.aiStatus === "pending" || !t.aiStatus))
+      .map((t: any) => ({
+        id: t._id,
+        title: t.title,
+        description: t.description || "",
+        agent: t.agent || "main",
+        status: "pending",
+        createdAt: t.createdAt,
+        taskId: t._id,
+      }));
+    
+    return NextResponse.json({ pendingTasks: pending, count: pending.length });
+  } catch (error: any) {
+    console.error("Queue error:", error.message);
+    return NextResponse.json({ pendingTasks: [], count: 0 });
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -16,33 +46,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Title required" }, { status: 400 });
     }
 
-    const task = {
-      id: taskId || `task_${Date.now()}`,
-      title,
-      description: description || "",
-      agent: agent || "main",
-      status: "pending",
-      createdAt: Date.now(),
-    };
-
-    pendingTasks.push(task);
-
-    // Spawn session immediately using the spawn endpoint
-    try {
-      // Call our own spawn endpoint which uses sessions_spawn internally
-      await fetch(new URL("/api/openclaw/spawn", request.url).toString(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task }),
-      });
-    } catch (e) {
-      console.log("Spawn error:", e);
-    }
-
     return NextResponse.json({
       success: true,
       status: "queued",
-      message: "Task queued for AI execution"
+      message: "Task queued"
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -53,10 +60,9 @@ export async function DELETE(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const taskId = searchParams.get("taskId");
   
-  if (taskId) {
-    pendingTasks = pendingTasks.filter(t => t.id !== taskId);
-    return NextResponse.json({ success: true });
+  if (!taskId) {
+    return NextResponse.json({ error: "Task ID required" }, { status: 400 });
   }
   
-  return NextResponse.json({ error: "Task ID required" }, { status: 400 });
+  return NextResponse.json({ success: true });
 }

@@ -22,24 +22,24 @@ export default function NotificationsPage() {
     : notifications;
 
   return (
-    <div className="min-h-screen bg-background-light p-5 pb-24">
-      <div className="flex items-center justify-between mb-6">
+    <div className="min-h-screen bg-[var(--background)] p-5 pb-24">
+      <div className="flex items-center justify-between mb-6 mt-10">
         <div>
-          <h1 className="text-2xl font-bold">Notifications</h1>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Notifications</h1>
           {unreadCount > 0 && (
-            <p className="text-sm text-primary font-medium">{unreadCount} unread</p>
+            <p className="text-sm text-blue-500 font-medium">{unreadCount} unread</p>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <button
             onClick={markAllAsRead}
-            className="text-xs text-primary font-medium"
+            className="text-xs text-[var(--text-secondary)] font-medium hover:text-[var(--text-primary)] transition-colors"
           >
             Mark all read
           </button>
           <button
             onClick={clearAll}
-            className="text-xs text-slate-400"
+            className="text-xs text-[var(--text-secondary)] hover:text-red-400 transition-colors"
           >
             Clear
           </button>
@@ -47,11 +47,13 @@ export default function NotificationsPage() {
       </div>
 
       {/* Filter by agent */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+      <div className="flex gap-2 mb-6 overflow-x-auto hide-scrollbar pb-1">
         <button
           onClick={() => setFilter(null)}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${
-            !filter ? "bg-primary text-slate-900" : "bg-white text-slate-600"
+          className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all border ${
+            !filter 
+              ? "bg-[var(--text-primary)] text-[var(--background)] border-[var(--text-primary)]" 
+              : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:bg-[var(--border)]"
           }`}
         >
           All
@@ -60,8 +62,10 @@ export default function NotificationsPage() {
           <button
             key={agent.id}
             onClick={() => setFilter(agent.id)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap flex items-center gap-1 ${
-              filter === agent.id ? "bg-primary text-slate-900" : "bg-white text-slate-600"
+            className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap flex items-center gap-1.5 transition-all border ${
+              filter === agent.id 
+                ? "bg-[var(--text-primary)] text-[var(--background)] border-[var(--text-primary)]" 
+                : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:bg-[var(--border)]"
             }`}
           >
             {agent.emoji} {agent.name}
@@ -72,36 +76,36 @@ export default function NotificationsPage() {
       {/* Notifications list */}
       <div className="space-y-3">
         {filteredNotifications.length === 0 ? (
-          <div className="text-center py-12">
-            <span className="material-icons text-4xl text-slate-300 mb-2">notifications_none</span>
-            <p className="text-slate-400">No notifications</p>
+          <div className="text-center py-20 opacity-30">
+            <span className="material-icons text-5xl text-[var(--text-secondary)] mb-3">notifications_none</span>
+            <p className="text-[var(--text-secondary)] font-light">No notifications</p>
           </div>
         ) : (
           filteredNotifications.map((notification) => (
             <div
               key={notification.id}
               onClick={() => markAsRead(notification.id)}
-              className={`bg-white rounded-xl p-4 shadow-sm cursor-pointer transition-all ${
-                notification.read ? "opacity-60" : "border-l-4 border-l-primary"
+              className={`bg-[var(--surface)] rounded-2xl p-4 shadow-sm border border-[var(--border)] cursor-pointer transition-all ${
+                notification.read ? "opacity-50" : "border-l-4 border-l-blue-500"
               }`}
             >
-              <div className="flex items-start gap-3">
-                <div className="text-xl">
+              <div className="flex items-start gap-4">
+                <div className="text-2xl mt-0.5">
                   {getAgentInfo(notification.agent)?.emoji}
                 </div>
                 <div className="flex-grow">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-sm">
+                    <span className="font-bold text-sm text-[var(--text-primary)]">
                       @{notification.agent}
                     </span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-[10px] text-[var(--text-secondary)] opacity-60">
                       {new Date(notification.createdAt).toLocaleTimeString()}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-600">{notification.message}</p>
+                  <p className="text-[13px] text-[var(--text-primary)] font-light leading-relaxed">{notification.message}</p>
                 </div>
                 {!notification.read && (
-                  <div className="w-2 h-2 rounded-full bg-primary"></div>
+                  <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shadow-sm"></div>
                 )}
               </div>
             </div>

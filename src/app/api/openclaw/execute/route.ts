@@ -3,16 +3,13 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "@convex/_generated/api";
 import { getOpenClawUrls } from "@/lib/openclaw";
 
-const OPENCLAW_URLS = getOpenClawUrls();
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { title, description, agent, taskId } = body;
 
-    console.log("🤖 Executing AI task:", { title, agent, taskId });
+    console.log("Executing AI task:", { title, agent, taskId });
 
-    // Build prompt for OpenClaw
     const trimmedTitle = String(title).trim();
     if (!trimmedTitle) {
       return NextResponse.json({ error: "Title required" }, { status: 400 });
@@ -22,142 +19,100 @@ export async function POST(request: NextRequest) {
       ? `Task: ${trimmedTitle}\n\nDescription: ${trimmedDescription}`
       : `Task: ${trimmedTitle}`;
 
+    // Setup Convex (optional - won't fail if unavailable)
     const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-    const convexAdminKey = process.env.CONVEX_ADMIN_KEY;
-    const convex = convexUrl ? new ConvexHttpClient(convexUrl) : null;
-    if (convex && convexAdminKey) {
-      (convex as any).setAdminAuth(convexAdminKey);
+    let convex: ConvexHttpClient | null = null;
+    try {
+      if (convexUrl) {
+        convex = new ConvexHttpClient(convexUrl);
+      }
+    } catch (e) {
+      console.log("Convex not available:", e);
     }
-    const convexMutation = async <T>(fn: T, args: Record<string, unknown>) => {
+
+    const convexMutation = async (fn: any, args: any) => {
       if (!convex) return;
-      await convex.mutation(fn as any, args, { skipQueue: true } as any);
+      try {
+        await convex.mutation(fn, args);
+      } catch (e) {
+        console.log("Convex mutation error:", e);
+      }
     };
 
-    let runId: string | undefined;
-    if (convex && taskId) {
-      runId = await convex.mutation(api.agentRuns.createAgentRun as any, {
-        taskId,
-        agent: agent || "main",
-        prompt,
-      }, { skipQueue: true } as any);
+    // Update task status to running (best effort via Convex)
+    if (taskId && convex) {
+      convexMutation(api.tasks.updateAIProgress, {
+        id: taskId,
+        aiStatus: "running",
+        aiProgress: 10,
+        aiResponseShort: "Task started...",
+      }).catch(() => {});
     }
 
-    // Try to execute via OpenClaw chat completions API
-    try {
-      let response: Response | null = null;
-      let lastError: Error | null = null;
-      let resolvedUrl: string | null = null;
-
-      for (const baseUrl of getOpenClawUrls()) {
-        try {
-          // Use OpenAI-compatible /v1/chat/completions endpoint
-          response = await fetch(`${baseUrl}/v1/chat/completions`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(process.env.OPENCLAW_TOKEN && {
-                "Authorization": `Bearer ${process.env.OPENCLAW_TOKEN}`
-              }),
-              "x-openclaw-agent-id": agent || "main",
-            },
-            body: JSON.stringify({
-              model: "openclaw",
-              messages: [{ role: "user", content: prompt }],
+    // Fire and forget - process in background
+    const openClawUrls = getOpenClawUrls();
+    
+    Promise.allSettled(
+      openClawUrls.map(async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(process.env.OPENCLAW_TOKEN && {
+              "Authorization": `Bearer ${process.env.OPENCLAW_TOKEN}`
             }),
-            signal: AbortSignal.timeout(60000), // 60s timeout for agent execution
-          });
-          resolvedUrl = baseUrl;
-          break;
-        } catch (error) {
-          lastError = error as Error;
-        }
-      }
-
-      if (!response) {
-        throw lastError || new Error("OpenClaw not reachable");
-      }
-
-      if (response.ok) {
-        const result = await response.json();
-        const assistantMessage = result.choices?.[0]?.message?.content || "";
-        console.log("✅ OpenClaw response received:", assistantMessage.slice(0, 100));
-        
-        if (convex && taskId) {
-          await convexMutation(api.tasks.updateAIProgress, {
-            id: taskId,
-            aiStatus: "completed",
-            aiProgress: 100,
-            aiResponse: assistantMessage,
-            aiResponseShort: assistantMessage.slice(0, 200),
-          });
-          if (runId) {
-            await convexMutation(api.agentRuns.updateAgentRun, {
-              id: runId,
-              status: "completed",
-              response: assistantMessage,
-            });
-          }
-        }
-        return NextResponse.json({
-          success: true,
-          status: "completed",
-          response: assistantMessage,
-          message: "Task completed by AI agent",
+            "x-openclaw-agent-id": agent || "main",
+          },
+          body: JSON.stringify({
+            model: "openclaw",
+            messages: [{ role: "user", content: prompt }],
+          }),
+          signal: AbortSignal.timeout(120000),
         });
-      } else {
-        const error = await response.text();
-        console.log("⚠️ OpenClaw error:", error);
-        if (convex && taskId) {
-          await convexMutation(api.tasks.updateAIProgress, {
-            id: taskId,
-            aiStatus: "blocked",
-            aiProgress: 0,
-            aiResponseShort: "OpenClaw error",
-            aiBlockers: [
-              `OpenClaw error from ${resolvedUrl || "unknown"}: ${error || "fetch failed"}`,
-            ],
-          });
-          if (runId) {
-            await convexMutation(api.agentRuns.updateAgentRun, {
-              id: runId,
-              status: "blocked",
-            });
+        return { response, baseUrl };
+      })
+    ).then(async (results) => {
+      for (const result of results) {
+        if (result.status === "fulfilled" && result.value?.response?.ok) {
+          const resultJson = await result.value.response.json();
+          const assistantMessage = resultJson.choices?.[0]?.message?.content || "";
+          console.log("OpenClaw response:", assistantMessage.slice(0, 100));
+          
+          if (taskId && convex) {
+            convexMutation(api.tasks.updateAIProgress, {
+              id: taskId,
+              aiStatus: "completed",
+              aiProgress: 100,
+              aiResponse: assistantMessage,
+              aiResponseShort: assistantMessage.slice(0, 200),
+            }).catch(() => {});
           }
+          return;
         }
-        return NextResponse.json({
-          success: true,
-          status: "blocked",
-          message: "Task created. AI agent blocked (OpenClaw error)."
-        });
       }
-    } catch (openClawError: any) {
-      console.log("⚠️ OpenClaw not reachable:", openClawError.message);
+      
+      // All failed
       if (convex && taskId) {
-        await convexMutation(api.tasks.updateAIProgress, {
+        convexMutation(api.tasks.updateAIProgress, {
           id: taskId,
           aiStatus: "blocked",
           aiProgress: 0,
-          aiResponseShort: `OpenClaw not reachable: ${openClawError.message}`,
-          aiBlockers: [
-            `OpenClaw not reachable. Set NEXT_PUBLIC_OPENCLAW_URL to a public URL.`,
-          ],
-        });
-        if (runId) {
-          await convexMutation(api.agentRuns.updateAgentRun, {
-            id: runId,
-            status: "blocked",
-          });
-        }
+          aiResponseShort: "OpenClaw execution failed",
+          aiBlockers: ["All OpenClaw URLs failed"],
+        }).catch(() => {});
       }
-      return NextResponse.json({
-        success: true,
-        status: "blocked",
-        message: `Task created. AI blocked (OpenClaw: ${openClawError.message})`
-      });
-    }
+    }).catch(console.error);
+
+    // Return immediately
+    return NextResponse.json({
+      success: true,
+      status: "running",
+      message: "Task started. Poll for completion.",
+      taskId,
+    });
 
   } catch (error: any) {
-    console.error("❌ Execute error:", error);
+    console.error("Execute error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -165,7 +120,7 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return NextResponse.json({ 
     status: "ok", 
-    openclawUrl: OPENCLAW_URLS,
+    openclawUrl: getOpenClawUrls(),
     ready: true
   });
 }

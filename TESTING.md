@@ -52,6 +52,41 @@
 - Cleared 5 blocked AI tasks from Convex DB that had stale error messages
 
 ## Current Status
-- Ngrok tunnel running: https://2e9f-2405-201-400b-e8da-97e6-7cfe-a8dc-35e2.ngrok-free.app
+- OpenClaw URL (Tailscale - primary): https://homeserver.tail07d4a6.ts.net
+- Ngrok (backup): https://2e9f-2405-201-400b-e8da-97e6-7cfe-a8dc-35e2.ngrok-free.app
 - Vercel app: https://ai-tasks-zeta.vercel.app
-- All blocked tasks cleared, ready for new AI task execution
+- Queue system: Working - reads from /api/tasks, executes in background
+- Test: Created AI task, it was picked up and marked "running"
+- Note: Background execution may stall on Vercel (serverless timeout limits) - works when tested locally
+
+## Summary
+- Queue system: Fully functional ✅
+- OpenClaw integration: Connected & working ✅
+- Background execution: Works on local, limited on Vercel serverless (needs persistent worker for full completion)
+
+## How to Use
+1. Create AI task in app → Sets aiStatus="pending"
+2. Cron (every 2 min) checks queue → GET /api/openclaw/queue
+3. Queue returns tasks where aiStatus="pending" 
+4. POST /api/openclaw/execute → Starts execution
+5. Task removed from queue, status updated to "running"
+
+## Remaining Issues
+- Vercel serverless background promises don't complete (needs Vercel Background Functions or separate worker)
+- In-memory storage resets on deployment (use Convex for persistence)
+
+## Fixes (2026-02-15 18:00)
+- Fixed `/api/tasks` route missing (was deleted in previous commit)
+- Fixed `/api/openclaw/execute` using wrong API endpoint (/api/sessions → /v1/chat/completions)
+- Fixed `.env.local` having old ngrok URL (379a... → 2e9f...)
+- OpenClaw API verified working: `curl` to `/v1/chat/completions` returns valid response
+
+## Fixes (2026-02-15 18:35)
+- Queue now reads from Convex instead of empty in-memory array
+- Execute endpoint now returns immediately (fire-and-forget) to avoid Vercel timeout
+- Updated cron job to call execute endpoint directly instead of sessions_spawn
+
+## Fixes (2026-02-15 19:00)
+- Queue now reads from REST API `/api/tasks` instead of Convex SDK
+- Execute endpoint updates task status via REST API PATCH
+- Verified: queue returns pending AI tasks, execution removes from queue

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
+import AddTaskButton from "@/components/AddTaskButton";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 
@@ -9,10 +10,10 @@ interface AgentStats {
   id: string;
   name: string;
   emoji: string;
-  color: string;
   status: "idle" | "active" | "blocked";
   currentTask?: string;
   tasksCompleted: number;
+  totalRuns: number;
 }
 
 interface AgentRun {
@@ -37,10 +38,10 @@ interface Task {
 }
 
 const AGENTS_CONFIG = [
-  { id: "researcher", name: "Researcher", emoji: "🔍", color: "bg-blue-500" },
-  { id: "writer", name: "Writer", emoji: "✍️", color: "bg-purple-500" },
-  { id: "editor", name: "Editor", emoji: "📝", color: "bg-orange-500" },
-  { id: "coordinator", name: "Coordinator", emoji: "🎯", color: "bg-green-500" },
+  { id: "researcher", name: "Researcher", emoji: "🔍" },
+  { id: "writer", name: "Writer", emoji: "✍️" },
+  { id: "editor", name: "Editor", emoji: "📝" },
+  { id: "coordinator", name: "Coordinator", emoji: "🎯" },
 ];
 
 export default function AgentsPage() {
@@ -49,34 +50,53 @@ export default function AgentsPage() {
   const runs = (useQuery(api.agentRuns.getAgentRuns) || []) as AgentRun[];
 
   const getAgentStats = (): AgentStats[] => {
-    return AGENTS_CONFIG.map((agent) => ({
-      ...agent,
-      status: getAgentStatus(agent.id, runs),
-      currentTask: getAgentCurrentTask(agent.id, tasks),
-      tasksCompleted: runs.filter((run) => run.agent === agent.id && run.status === "completed").length,
-    }));
+    return AGENTS_CONFIG.map((agent) => {
+      const agentRuns = runs.filter(r => r.agent === agent.id);
+      return {
+        ...agent,
+        status: getAgentStatus(agent.id, runs),
+        currentTask: getAgentCurrentTask(agent.id, tasks),
+        tasksCompleted: agentRuns.filter(r => r.status === "completed").length,
+        totalRuns: agentRuns.length,
+      };
+    });
   };
 
   const agents = getAgentStats();
 
-  const getStatusColor = (status: AgentStats["status"]) => {
+  const getStatusIndicator = (status: AgentStats["status"]) => {
     switch (status) {
-      case "active": return "bg-green-500";
-      case "blocked": return "bg-red-500";
-      default: return "bg-slate-400";
-    }
-  };
-
-  const getStatusLabel = (status: AgentStats["status"]) => {
-    switch (status) {
-      case "active": return "Working";
-      case "blocked": return "Blocked";
-      default: return "Idle";
+      case "active":
+        return (
+          <div className="flex items-center gap-1.5">
+            <div className="flex gap-0.5">
+              <span className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+            <span className="text-[11px] text-blue-500 font-medium">Working</span>
+          </div>
+        );
+      case "blocked":
+        return (
+          <div className="flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[14px] text-red-400">error</span>
+            <span className="text-[11px] text-red-400 font-medium">Blocked</span>
+          </div>
+        );
+      default:
+        return (
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-[var(--text-secondary)] opacity-40" />
+            <span className="text-[11px] text-[var(--text-secondary)]">Idle</span>
+          </div>
+        );
     }
   };
 
   const getAgentRuns = (agentId: string) =>
-    runs.filter((run: AgentRun) => run.agent === agentId);
+    runs.filter((run: AgentRun) => run.agent === agentId)
+      .sort((a, b) => b.startedAt - a.startedAt);
 
   const findTaskTitle = (taskId?: string) =>
     tasks.find((task: Task) => task._id === taskId)?.title;
@@ -96,86 +116,169 @@ export default function AgentsPage() {
     return activeTask?.title;
   }
 
+  const formatTime = (ts: number) => {
+    const d = new Date(ts);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + 
+      " " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  };
+
   return (
-    <div className="min-h-screen bg-background-light p-5 pb-24">
-      <h1 className="text-2xl font-bold mb-2">Agents</h1>
-      <p className="text-sm text-slate-500 mb-6">AI agents working on your tasks</p>
+    <div className="h-screen overflow-hidden relative flex flex-col bg-[var(--background)]">
+      {/* Header */}
+      <header className="pt-12 pb-2 px-6 z-10 bg-[var(--background)]/80 backdrop-blur-sm">
+        <h1 className="font-display text-2xl text-[var(--text-primary)]">Agents</h1>
+        <p className="text-sm text-[var(--text-secondary)] mt-1">AI agents working on your tasks</p>
+      </header>
 
-      {/* Agent Cards */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        {agents.map((agent) => (
-          <div
-            key={agent.id}
-            onClick={() => setSelectedAgent(selectedAgent === agent.id ? null : agent.id)}
-            className={`bg-white rounded-xl p-4 shadow-sm cursor-pointer transition-all ${
-              selectedAgent === agent.id ? "ring-2 ring-primary" : ""
-            }`}
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className={`w-12 h-12 rounded-xl ${agent.color} flex items-center justify-center text-2xl`}>
-                {agent.emoji}
+      {/* Main scrollable content */}
+      <main className="flex-1 overflow-y-auto hide-scrollbar px-6 pb-32 pt-4">
+        {/* Agent Cards */}
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          {agents.map((agent) => (
+            <button
+              key={agent.id}
+              onClick={() => setSelectedAgent(selectedAgent === agent.id ? null : agent.id)}
+              className={`text-left rounded-2xl p-4 transition-all border ${
+                selectedAgent === agent.id
+                  ? "bg-blue-500/10 border-blue-500/50"
+                  : "bg-[var(--surface)] border-[var(--border)] hover:bg-[var(--surface)]/80"
+              }`}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <span className="text-2xl">{agent.emoji}</span>
+                {selectedAgent !== agent.id && getStatusIndicator(agent.status)}
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className={`w-2.5 h-2.5 rounded-full ${getStatusColor(agent.status)}`}></div>
-                <span className="text-xs text-slate-500">{getStatusLabel(agent.status)}</span>
-              </div>
-            </div>
-            
-            <h3 className="font-bold text-slate-800">{agent.name}</h3>
-            
-            {agent.currentTask && agent.status === "active" && (
-              <p className="text-xs text-slate-500 mt-1 truncate">Working on: {agent.currentTask}</p>
-            )}
-            
-            <div className="mt-3 flex items-center justify-between">
-              <span className="text-xs text-slate-400">{agent.tasksCompleted} tasks done</span>
-            </div>
-          </div>
-        ))}
-      </div>
 
-      {/* Selected Agent Tasks */}
-      {selectedAgent && (
-        <div>
-          <h2 className="font-bold text-lg mb-3">
-            {AGENTS_CONFIG.find(a => a.id === selectedAgent)?.emoji} {AGENTS_CONFIG.find(a => a.id === selectedAgent)?.name}'s Tasks
-          </h2>
-          <div className="space-y-3">
-            {getAgentRuns(selectedAgent).length === 0 ? (
-              <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-                <p className="text-slate-400 text-sm">No runs yet</p>
+              <h3 className={`text-sm font-semibold ${
+                selectedAgent === agent.id ? "text-blue-500" : "text-[var(--text-primary)]"
+              }`}>
+                {agent.name}
+              </h3>
+
+              {agent.currentTask && agent.status === "active" && (
+                <p className={`text-[11px] mt-1 truncate ${
+                  selectedAgent === agent.id ? "text-blue-400" : "text-[var(--text-secondary)]"
+                }`}>
+                  {agent.currentTask}
+                </p>
+              )}
+
+              <div className="mt-3 flex items-center gap-3">
+                <span className={`text-[11px] ${
+                  selectedAgent === agent.id ? "text-blue-400/80" : "text-[var(--text-secondary)]"
+                }`}>
+                  {agent.tasksCompleted} completed
+                </span>
+                {agent.totalRuns > 0 && (
+                  <span className={`text-[11px] ${
+                    selectedAgent === agent.id ? "text-blue-400/80" : "text-[var(--text-secondary)]"
+                  }`}>
+                    {agent.totalRuns} runs
+                  </span>
+                )}
               </div>
-            ) : (
-              getAgentRuns(selectedAgent).map((run: AgentRun) => (
-                <div key={run._id} className="bg-white rounded-xl p-4 shadow-sm">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-semibold text-slate-800">
-                      {findTaskTitle(run.taskId) || "Unlinked task"}
-                    </div>
-                    <span className="text-xs text-slate-400">
-                      {run.status}
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-500 mb-2">Progress: {run.progress}%</div>
-                  <details>
-                    <summary className="text-xs text-slate-500 cursor-pointer">View result</summary>
-                    <pre className="mt-1 p-2 bg-slate-50 rounded text-xs whitespace-pre-wrap max-h-40 overflow-y-auto">
-                      {run.response || run.prompt}
-                    </pre>
-                  </details>
-                  {run.blockers && run.blockers.length > 0 && (
-                    <div className="mt-2 text-xs text-red-600">
-                      Blocked: {run.blockers.join("; ")}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+            </button>
+          ))}
         </div>
-      )}
 
+        {/* Selected Agent Run History */}
+        {selectedAgent && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-lg text-[var(--text-primary)]">
+                {AGENTS_CONFIG.find(a => a.id === selectedAgent)?.name} History
+              </h2>
+              <span className="text-xs text-[var(--text-secondary)]">
+                {getAgentRuns(selectedAgent).length} runs
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {getAgentRuns(selectedAgent).length === 0 ? (
+                <div className="py-10 text-center">
+                  <p className="text-[var(--text-secondary)] text-sm opacity-50">No runs yet</p>
+                </div>
+              ) : (
+                getAgentRuns(selectedAgent).map((run: AgentRun) => (
+                  <details
+                    key={run._id}
+                    className="group rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
+                  >
+                    <summary className="flex items-center justify-between p-3.5 cursor-pointer list-none">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm text-[var(--text-primary)] truncate ${
+                            run.status === "running" ? "font-medium" : ""
+                          }`}>
+                            {findTaskTitle(run.taskId) || "Unlinked task"}
+                          </span>
+                          {run.status === "running" && (
+                            <div className="flex gap-0.5 flex-shrink-0">
+                              <span className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                              <span className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                              <span className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                            </div>
+                          )}
+                          {run.status === "completed" && (
+                            <span className="material-symbols-outlined text-[14px] text-green-500 flex-shrink-0">check_circle</span>
+                          )}
+                          {run.status === "failed" && (
+                            <span className="material-symbols-outlined text-[14px] text-red-400 flex-shrink-0">error</span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-[var(--text-secondary)] mt-0.5 block opacity-70">
+                          {formatTime(run.startedAt)}
+                        </span>
+                      </div>
+                      <span className="material-symbols-outlined text-[18px] text-[var(--text-secondary)] group-open:rotate-180 transition-transform ml-2">
+                        expand_more
+                      </span>
+                    </summary>
+                    <div className="px-3.5 pb-3.5 border-t border-[var(--border)]">
+                      <div className="mt-3">
+                        <p className="text-[11px] text-[var(--text-secondary)] mb-1 uppercase tracking-wider font-semibold opacity-70">Prompt</p>
+                        <p className="text-xs text-[var(--text-primary)] leading-relaxed font-light">{run.prompt}</p>
+                      </div>
+                      {run.response && (
+                        <div className="mt-3">
+                          <p className="text-[11px] text-[var(--text-secondary)] mb-1 uppercase tracking-wider font-semibold opacity-70">Response</p>
+                          <pre className="text-xs text-[var(--text-primary)] whitespace-pre-wrap leading-relaxed bg-[var(--background)]/50 border border-[var(--border)] rounded-lg p-3 max-h-48 overflow-y-auto font-body">
+                            {run.response}
+                          </pre>
+                        </div>
+                      )}
+                      {run.blockers && run.blockers.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-[11px] text-red-400 mb-1 uppercase tracking-wider font-semibold">Blockers</p>
+                          <ul className="text-xs text-red-400/90 space-y-0.5 font-light">
+                            {run.blockers.map((b, i) => (
+                              <li key={i}>{b}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {run.completedAt && (
+                        <p className="text-[11px] text-[var(--text-secondary)] mt-3 opacity-50 italic">
+                          Completed {formatTime(run.completedAt)}
+                        </p>
+                      )}
+                    </div>
+                  </details>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+
+      <AddTaskButton />
       <BottomNav />
+
+      {/* Ambient background gradients */}
+      <div className="fixed top-0 left-0 w-full h-full pointer-events-none -z-10 overflow-hidden">
+        <div className="absolute -top-[20%] -right-[10%] w-[500px] h-[500px] ambient-gradient-blue rounded-full blur-3xl opacity-20 dark:opacity-10" />
+        <div className="absolute top-[40%] -left-[10%] w-[300px] h-[300px] ambient-gradient-rose rounded-full blur-3xl opacity-20 dark:opacity-10" />
+      </div>
     </div>
   );
 }
