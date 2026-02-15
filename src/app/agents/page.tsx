@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
 import BottomNav from "@/components/BottomNav";
 
 interface AgentStats {
@@ -23,31 +21,18 @@ const AGENTS_CONFIG = [
 ];
 
 export default function AgentsPage() {
-  // Get tasks from Convex
-  const tasks = useQuery(api.tasks.getTasks) || [];
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
 
-  // Calculate agent stats from actual tasks
+  // Get agent stats - for now static, will connect to API later
   const getAgentStats = (): AgentStats[] => {
-    return AGENTS_CONFIG.map((agent) => {
-      const agentTasks = tasks.filter((t: any) => t.agent === agent.id);
-      const activeTask = agentTasks.find((t: any) => t.aiStatus === "running" || t.status === "in_progress");
-      const completedTasks = agentTasks.filter((t: any) => t.status === "done");
-      
-      return {
-        ...agent,
-        status: activeTask ? "active" : "idle",
-        currentTask: activeTask?.title,
-        tasksCompleted: completedTasks.length,
-      };
-    });
+    return AGENTS_CONFIG.map((agent) => ({
+      ...agent,
+      status: "idle" as const,
+      tasksCompleted: 0,
+    }));
   };
 
   const agents = getAgentStats();
-
-  const getAgentTasks = (agentId: string) => {
-    return tasks.filter((t: any) => t.agent === agentId);
-  };
 
   const getStatusColor = (status: AgentStats["status"]) => {
     switch (status) {
@@ -98,11 +83,6 @@ export default function AgentsPage() {
             
             <div className="mt-3 flex items-center justify-between">
               <span className="text-xs text-slate-400">{agent.tasksCompleted} tasks done</span>
-              {getAgentTasks(agent.id).filter((t: any) => t.status !== "done").length > 0 && (
-                <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
-                  {getAgentTasks(agent.id).filter((t: any) => t.status !== "done").length} active
-                </span>
-              )}
             </div>
           </div>
         ))}
@@ -114,49 +94,8 @@ export default function AgentsPage() {
           <h2 className="font-bold text-lg mb-3">
             {AGENTS_CONFIG.find(a => a.id === selectedAgent)?.emoji} {AGENTS_CONFIG.find(a => a.id === selectedAgent)?.name}'s Tasks
           </h2>
-          <div className="space-y-2">
-            {getAgentTasks(selectedAgent).length === 0 ? (
-              <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-                <p className="text-slate-400 text-sm">No tasks assigned</p>
-              </div>
-            ) : (
-              getAgentTasks(selectedAgent).map((task: any) => (
-                <div key={task._id} className="bg-white rounded-xl p-4 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-medium text-slate-800">{task.title}</h4>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                      task.status === "in_progress" ? "bg-yellow-100 text-yellow-700" : 
-                      task.status === "done" ? "bg-green-100 text-green-700" :
-                      "bg-blue-100 text-blue-700"
-                    }`}>
-                      {task.status === "in_progress" ? "In Progress" : task.status === "done" ? "Done" : "Assigned"}
-                    </span>
-                  </div>
-                  {task.aiProgress !== undefined && (
-                    <div className="mt-2">
-                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-gradient-to-r from-primary to-green-400 rounded-full" 
-                          style={{ width: `${task.aiProgress}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-slate-400 mt-1">{task.aiProgress}% complete</p>
-                    </div>
-                  )}
-                  {task.aiStatus === "running" && (
-                    <p className="text-xs text-primary mt-1">AI is working...</p>
-                  )}
-                  {task.aiResponse && (
-                    <details className="mt-2">
-                      <summary className="text-xs text-slate-500 cursor-pointer">View Response</summary>
-                      <pre className="mt-1 p-2 bg-slate-50 rounded text-xs whitespace-pre-wrap">
-                        {task.aiResponse}
-                      </pre>
-                    </details>
-                  )}
-                </div>
-              ))
-            )}
+          <div className="bg-white rounded-xl p-4 shadow-sm text-center">
+            <p className="text-slate-400 text-sm">No tasks assigned</p>
           </div>
         </div>
       )}

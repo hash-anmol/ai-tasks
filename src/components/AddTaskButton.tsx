@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
 
 interface Task {
   _id: string;
@@ -10,7 +8,7 @@ interface Task {
   description?: string;
   status: string;
   priority?: string;
-  dueDate?: string;
+  dueDate?: number;
   tags: string[];
   isAI: boolean;
   agent?: string;
@@ -22,10 +20,7 @@ interface Task {
 }
 
 const AGENTS = [
-  { id: "researcher", name: "Researcher", emoji: "🔍", color: "bg-blue-500" },
-  { id: "writer", name: "Writer", emoji: "✍️", color: "bg-purple-500" },
-  { id: "editor", name: "Editor", emoji: "📝", color: "bg-orange-500" },
-  { id: "coordinator", name: "Coordinator", emoji: "🎯", color: "bg-green-500" },
+  { id: "main", name: "Main Agent", emoji: "🤖", color: "bg-primary" },
 ];
 
 export default function AddTaskButton() {
@@ -38,11 +33,19 @@ export default function AddTaskButton() {
   const [agent, setAgent] = useState<string | undefined>(undefined);
   const [dependsOn, setDependsOn] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [existingTasks, setExistingTasks] = useState<Task[]>([]);
 
-  // Get tasks from Convex
-  const tasks = useQuery(api.tasks.getTasks) || [];
-  const createTask = useMutation(api.tasks.createTask);
-  const existingTasks = tasks.filter((t: Task) => t.status !== "done");
+  // Fetch existing tasks for dependencies
+  useEffect(() => {
+    if (isOpen) {
+      fetch('/api/tasks')
+        .then(res => res.json())
+        .then(data => {
+          setExistingTasks((data.tasks || []).filter((t: Task) => t.status !== "done"));
+        })
+        .catch(console.error);
+    }
+  }, [isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,33 +55,41 @@ export default function AddTaskButton() {
     setIsSubmitting(true);
 
     try {
-      // Create task in Convex
-      await createTask({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        status: "pending",
-        priority,
-        dueDate: dueDate ? new Date(dueDate).getTime() : undefined,
-        tags: [],
-        isAI,
-        agent: isAI ? agent : undefined,
-        dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
+      // Create task via REST API
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim() || undefined,
+          status: "pending",
+          priority,
+          dueDate: dueDate ? new Date(dueDate).getTime() : undefined,
+          tags: [],
+          isAI,
+          agent: isAI ? agent : undefined,
+          dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
+        }),
       });
 
-      // If AI task and scheduled for now, execute via OpenClaw
-      if (isAI) {
+      const data = await res.json();
+
+      // If AI task, queue for OpenClaw to pick up
+      if (isAI && data._id) {
         try {
-          await fetch("/api/openclaw/execute", {
+          await fetch("/api/openclaw/queue", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               title: title.trim(),
               description: description.trim(),
               agent,
+              taskId: data._id,
             }),
           });
+          console.log("✅ Task queued for AI agent:", agent);
         } catch (err) {
-          console.log("OpenClaw execution (will work when reachable):", err);
+          console.log("OpenClaw queue error:", err);
         }
       }
 
@@ -90,6 +101,9 @@ export default function AddTaskButton() {
       setAgent(undefined);
       setDependsOn([]);
       setIsOpen(false);
+      
+      // Refresh the page to show new task
+      window.location.reload();
     } catch (err) {
       console.error("Error creating task:", err);
     } finally {
@@ -108,7 +122,7 @@ export default function AddTaskButton() {
   return (
     <>
       <button
-        className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-primary text-slate-900 w-16 h-16 rounded-full shadow-lg shadow-primary/30 flex items-center justify-center z-50 active:scale-95 transition-transform"
+        className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-primary text-slate-900 w-14 h-14 rounded-full shadow-lg shadow-primary/30 flex items-center justify-center z-50 active:scale-95 transition-transform"
         onClick={() => setIsOpen(true)}
       >
         <span className="material-icons text-3xl font-bold">add</span>

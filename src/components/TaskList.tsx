@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
 
 interface Task {
   _id: string;
@@ -46,10 +44,25 @@ export default function TaskList({ agentFilter = "all" }: { agentFilter?: string
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab") || "today";
   
-  // Get tasks from Convex
-  const tasks = useQuery(api.tasks.getTasks) || [];
-  const updateStatus = useMutation(api.tasks.updateTaskStatus);
-  const deleteTask = useMutation(api.tasks.deleteTask);
+  // Get tasks from REST API
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
+  const fetchTasks = async () => {
+    try {
+      const res = await fetch('/api/tasks');
+      const data = await res.json();
+      setTasks(data.tasks || []);
+    } catch (error) {
+      console.error("Error fetching tasks:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getFilteredTasks = () => {
     let filtered = tasks;
@@ -72,136 +85,207 @@ export default function TaskList({ agentFilter = "all" }: { agentFilter?: string
 
   const handleToggleStatus = async (task: Task) => {
     const newStatus = task.status === "done" ? "pending" : "done";
-    await updateStatus({ id: task._id as any, status: newStatus });
+    try {
+      await fetch(`/api/tasks?id=${task._id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      fetchTasks();
+    } catch (error) {
+      console.error("Error updating task:", error);
+    }
   };
 
   const handleDelete = async (taskId: string) => {
     if (confirm("Delete this task?")) {
-      await deleteTask({ id: taskId as any });
+      try {
+        await fetch(`/api/tasks?id=${taskId}`, { method: 'DELETE' });
+        fetchTasks();
+      } catch (error) {
+        console.error("Error deleting task:", error);
+      }
     }
   };
 
   const filteredTasks = getFilteredTasks();
+  const pendingTasks = filteredTasks.filter(t => t.status === "pending" && areDependenciesMet(t, tasks));
+  const inProgressTasks = filteredTasks.filter(t => t.status === "in_progress");
+  const doneTasks = filteredTasks.filter(t => t.status === "done");
 
-  if (tasks.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <span className="material-icons text-3xl text-slate-300">check_circle</span>
-        </div>
-        <h3 className="font-semibold text-slate-600 mb-1">No tasks yet</h3>
-        <p className="text-sm text-slate-400">Tap + to create your first task</p>
-      </div>
-    );
+  if (loading) {
+    return <div className="p-4 text-center text-slate-500">Loading tasks...</div>;
   }
 
   return (
-    <div className="space-y-3">
-      {filteredTasks.map((task: Task) => (
-        <div
-          key={task._id}
-          className={`bg-white rounded-xl p-4 shadow-sm border border-slate-100 ${
-            task.status === "done" ? "opacity-60" : ""
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            <button
-              onClick={() => handleToggleStatus(task)}
-              className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                task.status === "done"
-                  ? "bg-green-500 border-green-500"
-                  : "border-slate-300 hover:border-primary"
-              }`}
-            >
-              {task.status === "done" && (
-                <span className="material-icons text-white text-sm">check</span>
-              )}
-            </button>
-            
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <h4 className={`font-medium text-slate-800 truncate ${
-                  task.status === "done" ? "line-through text-slate-400" : ""
-                }`}>
-                  {task.title}
-                </h4>
-                {task.isAI && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-bold flex-shrink-0">
-                    AI
-                  </span>
-                )}
-                {task.agent && (
-                  <span className="text-sm flex-shrink-0">
-                    {getAgentInfo(task.agent)?.emoji}
-                  </span>
-                )}
-              </div>
-              
-              {task.description && (
-                <p className="text-sm text-slate-500 line-clamp-2 mb-2">
-                  {task.description}
-                </p>
-              )}
-
-              {/* AI Progress Bar */}
-              {task.isAI && task.aiProgress !== undefined && (
-                <div className="mt-2">
-                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                    <span>AI Progress</span>
-                    <span>{task.aiProgress}%</span>
-                  </div>
-                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-primary to-green-400 rounded-full transition-all"
-                      style={{ width: `${task.aiProgress}%` }}
-                    />
-                  </div>
-                  {task.aiStatus === "running" && (
-                    <p className="text-xs text-primary mt-1 flex items-center gap-1">
-                      <span className="animate-pulse">●</span> AI is working...
-                    </p>
-                  )}
-                  {task.aiResponse && (
-                    <details className="mt-2">
-                      <summary className="text-xs text-slate-500 cursor-pointer hover:text-primary">
-                        View AI Response
-                      </summary>
-                      <pre className="mt-2 p-2 bg-slate-50 rounded text-xs text-slate-600 whitespace-pre-wrap max-h-40 overflow-y-auto">
-                        {task.aiResponse}
-                      </pre>
-                    </details>
-                  )}
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 mt-2">
-                {task.priority && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                    task.priority === "high" ? "bg-red-100 text-red-700" :
-                    task.priority === "medium" ? "bg-yellow-100 text-yellow-700" :
-                    "bg-slate-100 text-slate-600"
-                  }`}>
-                    {task.priority}
-                  </span>
-                )}
-                {task.dueDate && (
-                  <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                    <span className="material-icons text-xs">schedule</span>
-                    {new Date(task.dueDate).toLocaleDateString()}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <button
-              onClick={() => handleDelete(task._id)}
-              className="text-slate-300 hover:text-red-500"
-            >
-              <span className="material-icons text-sm">delete</span>
-            </button>
+    <div className="space-y-6">
+      {pendingTasks.length > 0 && (
+        <div>
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+            To Do ({pendingTasks.length})
+          </h3>
+          <div className="space-y-2">
+            {pendingTasks.map((task) => (
+              <TaskCard 
+                key={task._id} 
+                task={task} 
+                onToggle={handleToggleStatus}
+                onDelete={handleDelete}
+              />
+            ))}
           </div>
         </div>
-      ))}
+      )}
+
+      {inProgressTasks.length > 0 && (
+        <div>
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+            In Progress ({inProgressTasks.length})
+          </h3>
+          <div className="space-y-2">
+            {inProgressTasks.map((task) => (
+              <TaskCard 
+                key={task._id} 
+                task={task} 
+                onToggle={handleToggleStatus}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {doneTasks.length > 0 && (
+        <div>
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+            Done ({doneTasks.length})
+          </h3>
+          <div className="space-y-2">
+            {doneTasks.slice(0, 5).map((task) => (
+              <TaskCard 
+                key={task._id} 
+                task={task} 
+                onToggle={handleToggleStatus}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {filteredTasks.length === 0 && (
+        <div className="text-center py-12">
+          <span className="material-icons text-4xl text-slate-300">task_alt</span>
+          <p className="text-slate-500 mt-2">No tasks yet</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TaskCard({ task, onToggle, onDelete }: { 
+  task: Task; 
+  onToggle: (task: Task) => void;
+  onDelete: (id: string) => void;
+}) {
+  const agentInfo = getAgentInfo(task.agent);
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className={`bg-white rounded-xl p-4 shadow-sm border-l-4 ${
+      task.status === "done" ? "border-green-500 opacity-60" :
+      task.status === "in_progress" ? "border-yellow-500" :
+      "border-primary"
+    }`}>
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-3 flex-1">
+          <button
+            onClick={() => onToggle(task)}
+            className={`mt-1 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+              task.status === "done" 
+                ? "bg-green-500 border-green-500" 
+                : "border-slate-300 hover:border-primary"
+            }`}
+          >
+            {task.status === "done" && (
+              <span className="material-icons text-white text-sm">check</span>
+            )}
+          </button>
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className={`font-medium text-slate-800 ${task.status === "done" ? "line-through" : ""}`}>
+                {task.title}
+              </h4>
+              {task.isAI && (
+                <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="material-icons text-[10px]">smart_toy</span>
+                  AI
+                </span>
+              )}
+              {agentInfo && (
+                <span className={`text-[10px] px-2 py-0.5 rounded-full ${agentInfo.color} text-white`}>
+                  {agentInfo.emoji} {agentInfo.name}
+                </span>
+              )}
+            </div>
+            
+            {task.description && (
+              <p className="text-sm text-slate-500 mt-1 line-clamp-2">{task.description}</p>
+            )}
+
+            {/* AI Progress */}
+            {task.isAI && task.aiProgress !== undefined && (
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                  <span>AI Progress</span>
+                  <span>{task.aiProgress}%</span>
+                </div>
+                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-primary to-green-400 rounded-full transition-all"
+                    style={{ width: `${task.aiProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* AI Response */}
+            {task.aiResponse && (
+              <details className="mt-2">
+                <summary className="text-xs text-slate-500 cursor-pointer">View AI Response</summary>
+                <pre className="mt-1 p-2 bg-slate-50 rounded text-xs whitespace-pre-wrap max-h-40 overflow-y-auto">
+                  {task.aiResponse}
+                </pre>
+              </details>
+            )}
+            
+            <div className="flex items-center gap-2 mt-2">
+              {task.priority && (
+                <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                  task.priority === "high" ? "bg-red-100 text-red-600" :
+                  task.priority === "medium" ? "bg-yellow-100 text-yellow-600" :
+                  "bg-slate-100 text-slate-600"
+                }`}>
+                  {task.priority}
+                </span>
+              )}
+              {task.dueDate && (
+                <span className="text-[10px] text-slate-400">
+                  {new Date(task.dueDate).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        <button
+          onClick={() => onDelete(task._id)}
+          className="p-1 text-slate-400 hover:text-red-500"
+        >
+          <span className="material-icons text-sm">delete</span>
+        </button>
+      </div>
     </div>
   );
 }
