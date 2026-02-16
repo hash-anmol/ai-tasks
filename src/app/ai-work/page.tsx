@@ -147,6 +147,7 @@ function AIWorkContent() {
   const deleteTask = useMutation(api.tasks.deleteTask);
   const [stoppingTasks, setStoppingTasks] = useState<Set<string>>(new Set());
   const [deletingTasks, setDeletingTasks] = useState<Set<string>>(new Set());
+  const [retryingTasks, setRetryingTasks] = useState<Set<string>>(new Set());
   
   const tasks = (tasksQuery || []) as Task[];
   const runs = (runsQuery || []) as AgentRun[];
@@ -193,6 +194,42 @@ function AIWorkContent() {
       console.error("Failed to delete task:", err);
     } finally {
       setDeletingTasks(prev => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
+    }
+  };
+
+  // Retry a blocked/failed task by calling execute API again
+  const handleRetryTask = async (taskId: string, taskTitle: string, taskDescription?: string) => {
+    setRetryingTasks(prev => new Set(prev).add(taskId));
+    try {
+      // Reset task status
+      await updateAIProgress({
+        id: taskId as Id<"tasks">,
+        aiStatus: "running",
+        aiProgress: 10,
+        aiResponseShort: "Retrying...",
+        aiBlockers: [],
+      });
+      
+      // Re-execute via OpenClaw
+      const task = tasks.find(t => t._id === taskId);
+      await fetch("/api/openclaw/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: task?.title || taskTitle,
+          description: task?.description || taskDescription,
+          agent: task?.agent,
+          taskId: taskId,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to retry task:", err);
+    } finally {
+      setRetryingTasks(prev => {
         const next = new Set(prev);
         next.delete(taskId);
         return next;
@@ -252,6 +289,16 @@ function AIWorkContent() {
               >
                 <span className="material-icons text-[13px]">stop_circle</span>
                 {stoppingTasks.has(focusedTask._id) ? "Stopping..." : "Stop"}
+              </button>
+            )}
+            {(focusedTask.aiStatus === "blocked" || focusedTask.aiStatus === "failed") && (
+              <button
+                onClick={() => handleRetryTask(focusedTask._id, focusedTask.title, focusedTask.description)}
+                disabled={retryingTasks.has(focusedTask._id)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-blue-500 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition-colors disabled:opacity-40"
+              >
+                <span className="material-icons text-[13px]">refresh</span>
+                {retryingTasks.has(focusedTask._id) ? "Retrying..." : "Retry"}
               </button>
             )}
             <button
