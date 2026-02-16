@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenClaw Voice API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /home/anmol/.openclaw/workspace/ai-tasks/scripts/local_voice_api.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

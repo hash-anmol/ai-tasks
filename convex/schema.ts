@@ -14,6 +14,8 @@ export default defineSchema({
     openclawSessionId: v.optional(v.string()),
     openclawTaskId: v.optional(v.string()),
     aiStatus: v.optional(v.string()), // "pending" | "running" | "completed" | "failed"
+    aiStartedAt: v.optional(v.number()), // when AI started processing
+    aiCompletedAt: v.optional(v.number()), // when AI finished processing
     aiProgress: v.optional(v.number()),
     aiResponse: v.optional(v.string()),
     aiResponseShort: v.optional(v.string()),

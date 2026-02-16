@@ -131,14 +131,28 @@ export async function POST(request: NextRequest) {
         }
       }
       
-      // All failed
+      // All failed - capture detailed error reasons
+      const errorReasons: string[] = [];
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          const { response, baseUrl } = result.value;
+          if (!response.ok) {
+            errorReasons.push(`${baseUrl}: HTTP ${response.status}`);
+          }
+        } else if (result.status === "rejected") {
+          errorReasons.push(`Promise rejected: ${result.reason}`);
+        }
+      }
+      
+      console.error("OpenClaw execution failed:", errorReasons);
+      
       if (convex && taskId) {
         convexMutation(api.tasks.updateAIProgress, {
           id: taskId,
           aiStatus: "blocked",
           aiProgress: 0,
           aiResponseShort: "OpenClaw execution failed",
-          aiBlockers: ["All OpenClaw URLs failed"],
+          aiBlockers: errorReasons.length > 0 ? errorReasons : ["All OpenClaw URLs failed"],
         }).catch(() => {});
       }
       

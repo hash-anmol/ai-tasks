@@ -108,6 +108,79 @@ function stripTaskBlocks(content: string): string {
   return content.replace(/\[CREATE_TASK\]\s*[\s\S]*?\s*\[\/CREATE_TASK\]/g, "").trim();
 }
 
+// File attachment types we support
+interface FileAttachment {
+  url: string;
+  filename: string;
+  type: "pdf" | "image" | "document" | "other";
+}
+
+// Parse file URLs from content
+function parseFileAttachments(content: string): FileAttachment[] {
+  const attachments: FileAttachment[] = [];
+  const urlRegex = /(https?:\/\/[^\s<>"\]]+\.(pdf|png|jpg|jpeg|gif|webp|doc|docx|xls|xlsx|ppt|pptx|txt|zip|mp3|mp4|mov|avi))/gi;
+  const matches = content.match(urlRegex);
+  
+  if (matches) {
+    for (const url of matches) {
+      const ext = url.split(".").pop()?.toLowerCase() || "";
+      let type: FileAttachment["type"] = "other";
+      
+      if (["pdf"].includes(ext)) type = "pdf";
+      else if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) type = "image";
+      else if (["doc", "docx", "txt"].includes(ext)) type = "document";
+      else if (["xls", "xlsx", "ppt", "pptx"].includes(ext)) type = "document";
+      
+      const filename = url.split("/").pop()?.split("?")[0] || "file";
+      attachments.push({ url, filename, type });
+    }
+  }
+  
+  return attachments;
+}
+
+// Get icon for file type
+function getFileIcon(type: FileAttachment["type"]): string {
+  switch (type) {
+    case "pdf": return "picture_as_pdf";
+    case "image": return "image";
+    case "document": return "description";
+    default: return "attach_file";
+  }
+}
+
+// FileAttachmentBlock component
+function FileAttachmentBlock({ attachments }: { attachments: FileAttachment[] }) {
+  if (attachments.length === 0) return null;
+  
+  return (
+    <div className="mt-2 pt-2 border-t border-[var(--border)]/30 space-y-1.5">
+      <p className="text-[10px] text-[var(--text-secondary)] opacity-60 font-medium uppercase tracking-wide">
+        Attachments ({attachments.length})
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {attachments.map((file, i) => (
+          <a
+            key={i}
+            href={file.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-blue-500/50 hover:bg-blue-500/5 transition-all group"
+          >
+            <span className="material-icons text-[14px] text-blue-500">{getFileIcon(file.type)}</span>
+            <span className="text-[11px] text-[var(--text-primary)] font-light max-w-[120px] truncate">
+              {file.filename}
+            </span>
+            <span className="material-icons text-[12px] text-[var(--text-secondary)] opacity-0 group-hover:opacity-60 transition-opacity">
+              download
+            </span>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Format tool call arguments for display
 function formatToolArgs(argsStr: string): string {
   try {
@@ -699,7 +772,7 @@ export default function Chat() {
       <div className="flex-1 overflow-y-auto hide-scrollbar space-y-3 pb-4">
         {messages.length === 0 && !isLoading && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <span className="material-icons text-4xl text-[var(--border)] mb-3 opacity-50">auto_awesome</span>
+            <span className="material-icons text-4xl text-[var(--border)] mb-3 opacity-30">chat</span>
             <p className="text-[var(--text-primary)] text-sm font-light mb-1 opacity-80">Chat with your AI agent</p>
             <p className="text-[var(--text-secondary)] text-xs font-light max-w-[260px] opacity-50 leading-relaxed">
               Ask questions, get help with tasks, or have the agent create and manage tasks for you.
@@ -726,11 +799,10 @@ export default function Chat() {
                     : "bg-[var(--surface)] text-[var(--text-primary)] rounded-bl-sm border border-[var(--border)]"
               }`}
             >
-              {msg.role === "assistant" && !msg.id.startsWith("error-") && (
+              {msg.role === "assistant" && !msg.id.startsWith("error-") && selectedAgent && (
                 <div className="flex items-center gap-1 mb-1 opacity-50">
-                  <span className="material-icons text-[11px]">smart_toy</span>
                   <span className="text-[10px] font-medium">
-                    {selectedAgent ? (AGENTS.find(a => a.id === selectedAgent)?.emoji + " " + AGENTS.find(a => a.id === selectedAgent)?.name) : "AI"}
+                    {AGENTS.find(a => a.id === selectedAgent)?.emoji} {AGENTS.find(a => a.id === selectedAgent)?.name}
                   </span>
                 </div>
               )}
@@ -758,6 +830,11 @@ export default function Chat() {
                   ))}
                 </div>
               )}
+
+              {/* File attachments */}
+              {msg.role === "assistant" && !msg.id.startsWith("error-") && (
+                <FileAttachmentBlock attachments={parseFileAttachments(msg.content)} />
+              )}
             </div>
           </div>
         ))}
@@ -766,12 +843,13 @@ export default function Chat() {
         {isLoading && (
           <div className="flex justify-start">
             <div className="max-w-[85%] sm:max-w-[75%] bg-[var(--surface)] rounded-2xl rounded-bl-sm px-4 py-2.5 border border-[var(--border)]">
-              <div className="flex items-center gap-1 mb-1 opacity-50">
-                <span className="material-icons text-[11px]">smart_toy</span>
-                <span className="text-[10px] font-medium">
-                  {selectedAgent ? (AGENTS.find(a => a.id === selectedAgent)?.emoji + " " + AGENTS.find(a => a.id === selectedAgent)?.name) : "AI"}
-                </span>
-              </div>
+              {selectedAgent && (
+                <div className="flex items-center gap-1 mb-1 opacity-50">
+                  <span className="text-[10px] font-medium">
+                    {AGENTS.find(a => a.id === selectedAgent)?.emoji} {AGENTS.find(a => a.id === selectedAgent)?.name}
+                  </span>
+                </div>
+              )}
 
               {/* Live thinking block while streaming */}
               {hasStreamingThinking && (

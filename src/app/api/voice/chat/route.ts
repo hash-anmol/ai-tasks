@@ -1,14 +1,7 @@
 import { NextRequest } from "next/server";
 import { getOpenClawUrls } from "@/lib/openclaw";
-import { execSync } from "child_process";
-import { writeFileSync, readFileSync, unlinkSync, existsSync } from "fs";
-import path from "path";
-import os from "os";
 
 const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
-const PYTHON_BIN = "/usr/bin/python3";
-const VOICE_READ_SCRIPT =
-  "/home/anmol/.openclaw/workspace/skills/voice-read/scripts/voice_read.py";
 const TTS_VOICE = "af_bella";
 
 /**
@@ -17,10 +10,15 @@ const TTS_VOICE = "af_bella";
  * Streaming voice chat endpoint. Sends Server-Sent Events so the frontend
  * can show real-time phase updates as each step completes.
  * 
+ * Architecture:
+ * - Transcription: Calls local server via Tailscale (runs Faster Whisper)
+ * - AI Response: Calls OpenClaw via Tailscale
+ * - TTS: Calls local server via Tailscale (runs Kokoro)
+ * 
  * Body: { audio: string (base64 data URL), conversationHistory?: {role,content}[] }
  * 
  * SSE events sent:
- *   phase:saving_audio     - Audio received, saving to disk
+ *   phase:saving_audio     - Audio received
  *   phase:transcribing     - Running Faster Whisper STT
  *   phase:transcribed      - Transcription complete (includes text)
  *   phase:sending_to_agent - Sending text to OpenClaw AI
@@ -30,9 +28,16 @@ const TTS_VOICE = "af_bella";
  *   phase:complete         - All done
  *   phase:error            - Something failed (includes error message)
  */
+
+function getLocalVoiceUrl(): string {
+  // Use Tailscale funnel URL for local voice API
+  const baseUrl = process.env.NEXT_PUBLIC_OPENCLAW_URL || "https://homeserver.tail07d4a6.ts.net";
+  // Voice API runs on port 18790
+  return baseUrl.replace(":18789", ":18791");
+}
+
 export async function POST(request: NextRequest) {
   const ts = Date.now();
-  const tmpDir = os.tmpdir();
 
   const encoder = new TextEncoder();
 
@@ -42,9 +47,6 @@ export async function POST(request: NextRequest) {
         const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
         controller.enqueue(encoder.encode(payload));
       }
-
-      let audioInputPath = "";
-      let ttsOutputPath = "";
 
       try {
         const body = await request.json();
@@ -56,104 +58,73 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        // --- Step 1: Save audio to temp file ---
+        // --- Step 1: Save audio ---
         sendEvent("phase", { step: "saving_audio", message: "Receiving audio..." });
 
         const base64Data = audio.includes(",") ? audio.split(",")[1] : audio;
         const audioBuffer = Buffer.from(base64Data, "base64");
 
-        // Detect format from data URL
-        let ext = "webm";
-        if (audio.startsWith("data:audio/wav")) ext = "wav";
-        else if (audio.startsWith("data:audio/mp3") || audio.startsWith("data:audio/mpeg")) ext = "mp3";
-        else if (audio.startsWith("data:audio/ogg")) ext = "ogg";
-
-        audioInputPath = path.join(tmpDir, `voice_input_${ts}.${ext}`);
-        writeFileSync(audioInputPath, audioBuffer);
-
-        // --- Step 2: Transcribe with Faster Whisper ---
+        // --- Step 2: Transcribe with local Faster Whisper ---
         sendEvent("phase", { step: "transcribing", message: "Transcribing your voice..." });
 
+        const localVoiceUrl = getLocalVoiceUrl();
         let transcription = "";
+        
         try {
-          // Use voice_read.py directly - it prints "Language: xx (prob)\n\nTranscribed text"
-          const output = execSync(
-            `${PYTHON_BIN} "${VOICE_READ_SCRIPT}" "${audioInputPath}"`,
-            { timeout: 45000, encoding: "utf-8", env: { ...process.env, PATH: process.env.PATH } }
-          );
+          const transcribeRes = await fetch(`${localVoiceUrl}/transcribe`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: audioBuffer.toString("base64"),
+            signal: AbortSignal.timeout(60000),
+          });
 
-          // Parse: skip "Language: ..." line, collect actual text
-          const lines = output.trim().split("\n");
-          transcription = lines
-            .filter((l) => !l.startsWith("Language:") && l.trim().length > 0)
-            .join(" ")
-            .trim();
+          if (!transcribeRes.ok) {
+            throw new Error(`Transcription failed: ${transcribeRes.statusText}`);
+          }
+
+          const transcribeData = await transcribeRes.json();
+          transcription = transcribeData.text || "";
+          
+          sendEvent("phase", { 
+            step: "transcribed", 
+            message: transcription,
+            language: transcribeData.language 
+          });
         } catch (err: any) {
-          console.error("Transcription error:", err.stderr || err.message);
+          console.error("Transcription error:", err.message);
           sendEvent("phase", {
             step: "error",
-            message: `Transcription failed: ${err.stderr?.substring(0, 200) || err.message}`,
+            message: `Transcription failed: ${err.message}`,
           });
-          cleanup(audioInputPath, "");
           controller.close();
           return;
         }
 
-        if (!transcription) {
-          sendEvent("phase", {
-            step: "error",
-            message: "No speech detected in the recording. Try speaking louder or closer to the mic.",
-          });
-          cleanup(audioInputPath, "");
+        if (!transcription.trim()) {
+          sendEvent("phase", { step: "error", message: "No speech detected" });
           controller.close();
           return;
         }
 
-        sendEvent("phase", {
-          step: "transcribed",
-          message: "Audio transcribed",
-          transcription,
-        });
-
-        // --- Step 3: Send to OpenClaw via /v1/chat/completions ---
-        sendEvent("phase", {
-          step: "sending_to_agent",
-          message: "Sending to AI agent...",
-        });
+        // --- Step 3: Send to OpenClaw ---
+        sendEvent("phase", { step: "sending_to_agent", message: "Getting AI response..." });
 
         const urls = getOpenClawUrls();
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-        };
-        if (OPENCLAW_TOKEN) {
-          headers["Authorization"] = `Bearer ${OPENCLAW_TOKEN}`;
-        }
-
-        // Build conversation messages - include history for context
-        const messages: { role: string; content: string }[] = [
-          {
-            role: "system",
-            content:
-              "You are having a voice conversation. Keep responses concise and conversational — 1-3 sentences. Avoid code blocks, markdown, or overly technical formatting. Speak naturally as if talking to a friend.",
-          },
-        ];
-
-        if (conversationHistory && Array.isArray(conversationHistory)) {
-          for (const msg of conversationHistory) {
-            messages.push({ role: msg.role, content: msg.content });
-          }
-        }
-
-        messages.push({ role: "user", content: transcription });
-
-        let responseText = "";
-        let lastError: Error | null = null;
-
+        let aiResponse = "";
+        
         for (const baseUrl of urls) {
           try {
-            const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+            const messages = [
+              ...(conversationHistory || []).slice(-10),
+              { role: "user", content: transcription }
+            ];
+
+            const response = await fetch(`${baseUrl}/v1/chat/completions`, {
               method: "POST",
-              headers,
+              headers: {
+                "Content-Type": "application/json",
+                ...(OPENCLAW_TOKEN ? { Authorization: `Bearer ${OPENCLAW_TOKEN}` } : {}),
+              },
               body: JSON.stringify({
                 model: "openclaw",
                 messages,
@@ -161,115 +132,70 @@ export async function POST(request: NextRequest) {
               signal: AbortSignal.timeout(120000),
             });
 
-            if (!res.ok) {
-              const errText = await res.text();
-              lastError = new Error(errText || `HTTP ${res.status}`);
-              continue;
-            }
+            if (!response.ok) continue;
 
-            const data = await res.json();
-            responseText = data.choices?.[0]?.message?.content || "";
+            const data = await response.json();
+            aiResponse = data.choices?.[0]?.message?.content || "";
             break;
-          } catch (err: any) {
-            lastError = err;
+          } catch (e) {
             continue;
           }
         }
 
-        if (!responseText) {
-          sendEvent("phase", {
-            step: "error",
-            message: `AI agent did not respond: ${lastError?.message || "No response"}`,
-          });
-          cleanup(audioInputPath, "");
+        if (!aiResponse) {
+          sendEvent("phase", { step: "error", message: "Failed to get AI response" });
           controller.close();
           return;
         }
 
-        sendEvent("phase", {
-          step: "agent_responded",
-          message: "AI responded",
-          text: responseText,
+        sendEvent("phase", { 
+          step: "agent_responded", 
+          message: aiResponse 
         });
 
-        // --- Step 4: Generate speech with Kokoro TTS ---
-        sendEvent("phase", {
-          step: "generating_speech",
-          message: "Converting response to speech...",
-        });
-
-        let audioBase64: string | null = null;
-        ttsOutputPath = path.join(tmpDir, `voice_response_${ts}.wav`);
+        // --- Step 4: Generate TTS with local Kokoro ---
+        sendEvent("phase", { step: "generating_speech", message: "Generating voice response..." });
 
         try {
-          const cleanText = cleanForTTS(responseText);
-          const ttsText =
-            cleanText.length > 2000
-              ? cleanText.substring(0, 2000) + "..."
-              : cleanText;
+          const ttsRes = await fetch(`${localVoiceUrl}/tts`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              text: aiResponse.substring(0, 1000), // Limit text length
+              voice: TTS_VOICE 
+            }),
+            signal: AbortSignal.timeout(60000),
+          });
 
-          // Write text to a temp file to avoid shell escaping issues
-          const textFilePath = path.join(tmpDir, `voice_text_${ts}.txt`);
-          writeFileSync(textFilePath, ttsText, "utf-8");
-
-          // Use Python to call Kokoro TTS with text from file
-          execSync(
-            `${PYTHON_BIN} -c "
-import sys
-sys.path.insert(0, '/home/anmol/.local/bin')
-text = open('${textFilePath}').read()
-import soundfile as sf
-from kokoro_onnx import Kokoro
-k = Kokoro('/home/anmol/.kokoro/kokoro-v0_19.onnx', '/home/anmol/.kokoro/voices.bin')
-audio, sr = k.create(text, voice='${TTS_VOICE}')
-sf.write('${ttsOutputPath}', audio, sr)
-print('OK')
-"`,
-            { timeout: 90000, encoding: "utf-8" }
-          );
-
-          // Cleanup text file
-          try { unlinkSync(textFilePath); } catch {}
-
-          if (existsSync(ttsOutputPath)) {
-            const audioData = readFileSync(ttsOutputPath);
-            audioBase64 = `data:audio/wav;base64,${audioData.toString("base64")}`;
+          if (!ttsRes.ok) {
+            throw new Error(`TTS failed: ${ttsRes.statusText}`);
           }
+
+          const ttsData = await ttsRes.json();
+          
+          sendEvent("phase", { 
+            step: "speech_ready", 
+            audio: ttsData.audio 
+          });
         } catch (err: any) {
-          console.error("TTS error:", err.stderr || err.message);
-          // Don't fail — the text response is still valuable
-          sendEvent("phase", {
-            step: "tts_warning",
-            message: "Speech generation had an issue, but text response is ready.",
+          console.error("TTS error:", err.message);
+          // Don't fail - just send text response
+          sendEvent("phase", { 
+            step: "speech_ready", 
+            audio: null,
+            message: "Voice generation failed, showing text instead"
           });
         }
 
-        if (audioBase64) {
-          sendEvent("phase", {
-            step: "speech_ready",
-            message: "Speech ready",
-            audio: audioBase64,
-          });
-        }
+        sendEvent("phase", { step: "complete", message: "Done!" });
 
-        // --- Done ---
-        sendEvent("phase", {
-          step: "complete",
-          message: "Done",
-          transcription,
-          text: responseText,
-          audio: audioBase64,
+      } catch (err: any) {
+        console.error("Voice chat error:", err);
+        sendEvent("phase", { 
+          step: "error", 
+          message: err.message || "Unknown error" 
         });
-
-        cleanup(audioInputPath, ttsOutputPath);
-        controller.close();
-      } catch (error: any) {
-        console.error("Voice chat stream error:", error);
-        sendEvent("phase", {
-          step: "error",
-          message: error.message || "Voice chat failed unexpectedly",
-        });
-        cleanup(audioInputPath, ttsOutputPath);
+      } finally {
         controller.close();
       }
     },
@@ -282,27 +208,4 @@ print('OK')
       Connection: "keep-alive",
     },
   });
-}
-
-/** Clean temp files */
-function cleanup(inputPath: string, outputPath: string) {
-  try { if (inputPath && existsSync(inputPath)) unlinkSync(inputPath); } catch {}
-  try { if (outputPath && existsSync(outputPath)) unlinkSync(outputPath); } catch {}
-}
-
-/** Strip markdown for natural speech */
-function cleanForTTS(text: string): string {
-  return text
-    .replace(/```[\s\S]*?```/g, " code block omitted ")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
-    .replace(/_([^_]+)_/g, "$1")
-    .replace(/#{1,6}\s+/g, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/^\s*[-*+]\s+/gm, "")
-    .replace(/^\s*\d+\.\s+/gm, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
 }

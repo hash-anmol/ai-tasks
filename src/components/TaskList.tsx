@@ -20,6 +20,8 @@ interface Task {
   aiProgress?: number;
   aiNotes?: string;
   aiStatus?: string;
+  aiStartedAt?: number;
+  aiCompletedAt?: number;
   aiResponse?: string;
   aiResponseShort?: string;
   aiBlockers?: string[];
@@ -29,6 +31,19 @@ interface Task {
   createdBy?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+// Helper to format duration
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
 }
 
 const AGENTS: Record<string, { name: string; emoji: string; color: string }> = {
@@ -510,12 +525,18 @@ function TaskCard({ task, onToggle, onDelete, isBlocked = false, blockedLabel = 
                 <span className="text-[10px] text-[var(--text-secondary)] font-light flex items-center gap-0.5 opacity-60 ml-1">
                   <span className="material-icons text-[10px] text-green-500">check_circle</span>
                   Done
+                  {task.aiStartedAt && task.aiCompletedAt && (
+                    <span className="opacity-50"> · {formatDuration(task.aiCompletedAt - task.aiStartedAt)}</span>
+                  )}
                 </span>
               )}
               {task.aiStatus === "failed" && (
                 <span className="text-[10px] text-red-400 font-light flex items-center gap-0.5 ml-1">
                   <span className="material-icons text-[10px]">error</span>
                   Failed
+                  {task.aiStartedAt && task.aiCompletedAt && (
+                    <span className="opacity-50"> · {formatDuration(task.aiCompletedAt - task.aiStartedAt)}</span>
+                  )}
                 </span>
               )}
               {task.aiStatus === "blocked" && !hasDependencyBlockers && (

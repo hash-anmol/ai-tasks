@@ -82,6 +82,7 @@ export const createTask = mutation({
     const taskId = await ctx.db.insert("tasks", {
       ...args,
       aiStatus: args.isAI ? "pending" : undefined,
+      aiStartedAt: args.isAI ? Date.now() : undefined,
       aiProgress: args.isAI ? 0 : undefined,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -147,10 +148,17 @@ export const updateAIProgress = mutation({
     aiBlockers: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    const { id, ...updates } = args;
+    const { id, aiStatus, ...updates } = args;
+    const now = Date.now();
+    // Set completed timestamp when AI finishes
+    const completionFields = (aiStatus === "completed" || aiStatus === "failed") 
+      ? { aiCompletedAt: now }
+      : {};
     await ctx.db.patch(id, {
+      aiStatus,
       ...updates,
-      updatedAt: Date.now(),
+      ...completionFields,
+      updatedAt: now,
     });
   },
 });
