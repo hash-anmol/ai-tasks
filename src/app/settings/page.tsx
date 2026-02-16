@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useGamification } from "@/hooks/useGamification";
 import BottomNav from "@/components/BottomNav";
+import AddTaskButton from "@/components/AddTaskButton";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 
@@ -119,6 +120,7 @@ export default function SettingsPage() {
           <p className="text-xs opacity-60">© 2026 AI Tasks</p>
         </div>
       </div>
+      <AddTaskButton />
       <BottomNav />
     </div>
   );

@@ -21,6 +21,17 @@ interface Task {
   updatedAt: number;
 }
 
+interface Session {
+  _id: string;
+  sessionId: string;
+  name: string;
+  agent: string;
+  status: string;
+  taskCount: number;
+  lastTaskTitle?: string;
+  updatedAt: number;
+}
+
 const AGENTS = [
   { id: "researcher", name: "Researcher", emoji: "🔍", color: "bg-blue-500" },
   { id: "writer", name: "Writer", emoji: "✍️", color: "bg-purple-500" },
@@ -36,10 +47,19 @@ export default function AddTaskButton() {
   const [priority, setPriority] = useState<string>("medium");
   const [isAI, setIsAI] = useState(false);
   const [agent, setAgent] = useState<string | undefined>(undefined);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>("new");
   const [dependsOn, setDependsOn] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const existingTasks = (useQuery(api.tasks.getTasks) || []) as Task[];
+  const allSessions = (useQuery(api.sessions.getSessions) || []) as Session[];
   const createTask = useMutation(api.tasks.createTask);
+
+  // Filter sessions for the selected agent, sorted by most recent
+  const agentSessions = agent
+    ? allSessions
+        .filter((s) => s.agent === agent)
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+    : [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +86,7 @@ export default function AddTaskButton() {
       const savedDescription = description.trim();
       const savedAgent = agent;
       const savedIsAI = isAI;
+      const savedSessionId = selectedSessionId !== "new" ? selectedSessionId : undefined;
 
       setTitle("");
       setDescription("");
@@ -73,6 +94,7 @@ export default function AddTaskButton() {
       setPriority("medium");
       setIsAI(false);
       setAgent(undefined);
+      setSelectedSessionId("new");
       setDependsOn([]);
       setIsOpen(false);
       setIsSubmitting(false);
@@ -89,6 +111,7 @@ export default function AddTaskButton() {
             description: savedDescription,
             agent: savedAgent,
             taskId,
+            sessionId: savedSessionId,
           }),
         }).catch((err) => {
           console.log("OpenClaw queue error (background):", err);
@@ -110,10 +133,16 @@ export default function AddTaskButton() {
     );
   };
 
+  // Reset session selection when agent changes
+  const handleAgentChange = (newAgent: string | undefined) => {
+    setAgent(newAgent);
+    setSelectedSessionId("new");
+  };
+
   return (
     <>
       {/* Google-plus-style FAB - centered in bottom nav cutout */}
-      <div className="fixed bottom-0 left-0 w-full z-50 pointer-events-none">
+      <div className="fixed bottom-0 left-0 w-full z-50 pointer-events-none voice-mode-hide">
         <div className="absolute left-1/2 -translate-x-1/2 -top-7 z-20 pointer-events-auto">
           <button
             className="w-16 h-16 bg-[var(--surface)] rounded-full shadow-fab flex items-center justify-center transform transition-transform active:scale-95 border border-[var(--border)] dark:shadow-blue-500/10 dark:shadow-lg"
@@ -201,33 +230,71 @@ export default function AddTaskButton() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => setIsAI(!isAI)}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-full border transition-all text-sm ${
-                    isAI 
-                      ? "border-blue-500 bg-blue-500/10 text-blue-500 font-medium" 
-                      : "border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--text-primary)] hover:text-[var(--text-primary)]"
-                  }`}
-                >
-                  <span className="material-icons text-base">smart_toy</span>
-                  <span>AI Task</span>
-                </button>
-
-                {isAI && (
-                  <select
-                    value={agent || ""}
-                    onChange={(e) => setAgent(e.target.value || undefined)}
-                    className="flex-1 px-4 py-2.5 rounded-full border border-blue-500/30 bg-blue-500/5 focus:border-blue-500 focus:outline-none text-sm font-medium text-blue-500"
+              <div className="space-y-3">
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newIsAI = !isAI;
+                      setIsAI(newIsAI);
+                      if (!newIsAI) {
+                        setAgent(undefined);
+                        setSelectedSessionId("new");
+                      }
+                    }}
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-full border transition-all text-sm ${
+                      isAI 
+                        ? "border-blue-500 bg-blue-500/10 text-blue-500 font-medium" 
+                        : "border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--text-primary)] hover:text-[var(--text-primary)]"
+                    }`}
                   >
-                    <option value="">Select Agent</option>
-                    {AGENTS.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.emoji} {a.name}
-                      </option>
-                    ))}
-                  </select>
+                    <span className="material-icons text-base">smart_toy</span>
+                    <span>AI Task</span>
+                  </button>
+
+                  {isAI && (
+                    <select
+                      value={agent || ""}
+                      onChange={(e) => handleAgentChange(e.target.value || undefined)}
+                      className="flex-1 px-4 py-2.5 rounded-full border border-blue-500/30 bg-blue-500/5 focus:border-blue-500 focus:outline-none text-sm font-medium text-blue-500"
+                    >
+                      <option value="">Select Agent</option>
+                      {AGENTS.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.emoji} {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Session picker - shows when AI + agent selected */}
+                {isAI && agent && (
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Session</label>
+                    <select
+                      value={selectedSessionId}
+                      onChange={(e) => setSelectedSessionId(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)]/50 focus:border-blue-500 focus:outline-none text-sm font-light text-[var(--text-primary)]"
+                    >
+                      <option value="new">+ New Session</option>
+                      {agentSessions.map((session) => {
+                        const timeAgo = getTimeAgo(session.updatedAt);
+                        const statusIcon = session.status === "active" ? "●" : session.status === "completed" ? "✓" : "✕";
+                        const statusColor = session.status === "active" ? "text-green-500" : "";
+                        return (
+                          <option key={session.sessionId} value={session.sessionId}>
+                            {statusIcon} {session.name} ({session.taskCount} task{session.taskCount !== 1 ? "s" : ""}, {timeAgo})
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {selectedSessionId !== "new" && (
+                      <p className="mt-1.5 text-[11px] text-[var(--text-secondary)]">
+                        Continuing in existing session — the agent retains context from previous tasks
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -268,4 +335,17 @@ export default function AddTaskButton() {
       )}
     </>
   );
+}
+
+function getTimeAgo(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(timestamp).toLocaleDateString();
 }

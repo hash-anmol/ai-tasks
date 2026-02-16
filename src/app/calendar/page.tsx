@@ -1,4 +1,5 @@
 import BottomNav from "@/components/BottomNav";
+import AddTaskButton from "@/components/AddTaskButton";
 
 export default function CalendarPage() {
   const today = new Date();
@@ -56,6 +57,7 @@ export default function CalendarPage() {
           </div>
         </div>
       </div>
+      <AddTaskButton />
       <BottomNav />
     </div>
   );

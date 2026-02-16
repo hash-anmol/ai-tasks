@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import BottomNav from "@/components/BottomNav";
+import AddTaskButton from "@/components/AddTaskButton";
 
 interface Task {
   _id: string;
@@ -59,6 +60,7 @@ export default function ProjectsPage() {
           </div>
         ))}
       </div>
+      <AddTaskButton />
       <BottomNav />
     </div>
   );

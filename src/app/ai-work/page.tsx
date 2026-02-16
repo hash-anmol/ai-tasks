@@ -5,8 +5,9 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import AddTaskButton from "@/components/AddTaskButton";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 
 interface Task {
   _id: string;
@@ -69,6 +70,10 @@ function AIWorkContent() {
   const tasksQuery = useQuery(api.tasks.getTasks);
   const runsQuery = useQuery(api.agentRuns.getAgentRuns);
   const isLoading = tasksQuery === undefined || runsQuery === undefined;
+  const updateAIProgress = useMutation(api.tasks.updateAIProgress);
+  const deleteTask = useMutation(api.tasks.deleteTask);
+  const [stoppingTasks, setStoppingTasks] = useState<Set<string>>(new Set());
+  const [deletingTasks, setDeletingTasks] = useState<Set<string>>(new Set());
   
   const tasks = (tasksQuery || []) as Task[];
   const runs = (runsQuery || []) as AgentRun[];
@@ -86,6 +91,41 @@ function AIWorkContent() {
   };
 
   const findTask = (taskId?: string) => tasks.find(t => t._id === taskId);
+
+  const handleStopTask = async (taskId: string) => {
+    setStoppingTasks(prev => new Set(prev).add(taskId));
+    try {
+      await updateAIProgress({
+        id: taskId as Id<"tasks">,
+        aiStatus: "failed",
+        aiProgress: 0,
+        aiResponseShort: "Stopped by user",
+      });
+    } catch (err) {
+      console.error("Failed to stop task:", err);
+    } finally {
+      setStoppingTasks(prev => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    setDeletingTasks(prev => new Set(prev).add(taskId));
+    try {
+      await deleteTask({ id: taskId as Id<"tasks"> });
+    } catch (err) {
+      console.error("Failed to delete task:", err);
+    } finally {
+      setDeletingTasks(prev => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
+    }
+  };
 
   const getStatusIndicator = (status: string) => {
     switch (status) {
@@ -131,6 +171,24 @@ function AIWorkContent() {
               <span className="material-icons text-[12px]">{statusInfo.icon}</span>
               {statusInfo.label}
             </span>
+            {focusedTask.aiStatus === "running" && (
+              <button
+                onClick={() => handleStopTask(focusedTask._id)}
+                disabled={stoppingTasks.has(focusedTask._id)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-red-500 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors disabled:opacity-40"
+              >
+                <span className="material-icons text-[13px]">stop_circle</span>
+                {stoppingTasks.has(focusedTask._id) ? "Stopping..." : "Stop"}
+              </button>
+            )}
+            <button
+              onClick={() => handleDeleteTask(focusedTask._id)}
+              disabled={deletingTasks.has(focusedTask._id)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-[var(--text-secondary)] hover:text-red-500 bg-[var(--background)]/50 hover:bg-red-500/10 border border-[var(--border)] hover:border-red-500/20 transition-colors disabled:opacity-40"
+            >
+              <span className="material-icons text-[13px]">delete_outline</span>
+              {deletingTasks.has(focusedTask._id) ? "..." : "Delete"}
+            </button>
           </div>
         </header>
 
@@ -258,31 +316,55 @@ function AIWorkContent() {
             <div className="space-y-2">
               {aiTasks.filter(t => t.aiStatus === "running").map(task => {
                 const agentInfo = getAgentInfo(task.agent);
+                const isStopping = stoppingTasks.has(task._id);
+                const isDeleting = deletingTasks.has(task._id);
                 return (
-                  <Link
+                  <div
                     key={task._id}
-                    href={`/ai-work?task=${task._id}`}
-                    className="group py-4 px-4 rounded-2xl border border-blue-500/20 bg-blue-500/5 flex items-center justify-between hover:bg-blue-500/10 transition-colors"
+                    className="rounded-2xl border border-blue-500/20 bg-blue-500/5 overflow-hidden"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="flex gap-1">
-                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    <Link
+                      href={`/ai-work?task=${task._id}`}
+                      className="group py-4 px-4 flex items-center justify-between hover:bg-blue-500/10 transition-colors"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="flex gap-1">
+                          <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                          <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                          <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                        </div>
+                        <div>
+                          <p className="text-[15px] text-[var(--text-primary)] font-medium">{task.title}</p>
+                          {agentInfo && (
+                            <p className={`text-[10px] font-semibold tracking-wider uppercase mt-0.5 ${agentInfo.color}`}>
+                              {agentInfo.emoji} {agentInfo.name}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-[15px] text-[var(--text-primary)] font-medium">{task.title}</p>
-                        {agentInfo && (
-                          <p className={`text-[10px] font-semibold tracking-wider uppercase mt-0.5 ${agentInfo.color}`}>
-                            {agentInfo.emoji} {agentInfo.name}
-                          </p>
-                        )}
-                      </div>
+                      <span className="material-icons text-[var(--text-secondary)] opacity-40 group-hover:opacity-100 transition-opacity">
+                        chevron_right
+                      </span>
+                    </Link>
+                    <div className="flex items-center gap-2 px-4 pb-3 -mt-1">
+                      <button
+                        onClick={(e) => { e.preventDefault(); handleStopTask(task._id); }}
+                        disabled={isStopping}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-red-500 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors disabled:opacity-40"
+                      >
+                        <span className="material-icons text-[14px]">{isStopping ? "hourglass_empty" : "stop_circle"}</span>
+                        {isStopping ? "Stopping..." : "Stop"}
+                      </button>
+                      <button
+                        onClick={(e) => { e.preventDefault(); handleDeleteTask(task._id); }}
+                        disabled={isDeleting}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-[var(--text-secondary)] bg-[var(--background)]/50 hover:bg-[var(--background)] border border-[var(--border)] transition-colors disabled:opacity-40"
+                      >
+                        <span className="material-icons text-[14px]">{isDeleting ? "hourglass_empty" : "delete_outline"}</span>
+                        {isDeleting ? "Deleting..." : "Delete"}
+                      </button>
                     </div>
-                    <span className="material-icons text-[var(--text-secondary)] opacity-40 group-hover:opacity-100 transition-opacity">
-                      chevron_right
-                    </span>
-                  </Link>
+                  </div>
                 );
               })}
             </div>

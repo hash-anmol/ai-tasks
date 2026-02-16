@@ -50,6 +50,17 @@ export const getTask = query({
   },
 });
 
+// Get subtasks for a parent task
+export const getSubtasks = query({
+  args: { parentTaskId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("tasks")
+      .filter((q) => q.eq(q.field("parentTaskId"), args.parentTaskId))
+      .collect();
+  },
+});
+
 // Create task
 export const createTask = mutation({
   args: {
@@ -63,6 +74,9 @@ export const createTask = mutation({
     agent: v.optional(v.string()),
     scheduledAt: v.optional(v.number()),
     dependsOn: v.optional(v.array(v.string())),
+    parentTaskId: v.optional(v.string()),
+    isSubtask: v.optional(v.boolean()),
+    createdBy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const taskId = await ctx.db.insert("tasks", {
@@ -109,6 +123,9 @@ export const updateTask = mutation({
     aiBlockers: v.optional(v.array(v.string())),
     openclawSessionId: v.optional(v.string()),
     openclawTaskId: v.optional(v.string()),
+    parentTaskId: v.optional(v.string()),
+    isSubtask: v.optional(v.boolean()),
+    createdBy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;

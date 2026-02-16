@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import BottomNav from "@/components/BottomNav";
+import AddTaskButton from "@/components/AddTaskButton";
 
 interface Activity {
   id: string;
@@ -104,6 +105,7 @@ export default function ActivityPage() {
         </div>
       )}
 
+      <AddTaskButton />
       <BottomNav />
     </div>
   );

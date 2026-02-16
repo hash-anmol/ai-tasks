@@ -1,6 +1,8 @@
 "use client";
 
 import { useGamification, ACHIEVEMENTS } from "@/hooks/useGamification";
+import BottomNav from "@/components/BottomNav";
+import AddTaskButton from "@/components/AddTaskButton";
 
 export default function AchievementsPage() {
   const { stats, loaded } = useGamification();
@@ -14,7 +16,7 @@ export default function AchievementsPage() {
   }));
 
   return (
-    <div className="min-h-screen bg-background-light p-5">
+    <div className="min-h-screen bg-background-light p-5 pb-24">
       <h1 className="text-2xl font-bold mb-2">Achievements</h1>
       <p className="text-sm text-slate-500 mb-6">
         {stats.achievements.length} / {allAchievements.length} unlocked
@@ -39,6 +41,8 @@ export default function AchievementsPage() {
           </div>
         ))}
       </div>
+      <AddTaskButton />
+      <BottomNav />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { getOpenClawUrls } from "@/lib/openclaw";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, description, agent, taskId } = body;
+    const { title, description, agent, taskId, sessionId: existingSessionId } = body;
 
     console.log("Executing AI task:", { title, agent, taskId });
 
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    // Update task status to running (best effort via Convex)
+    // Update task status to running (best effort via Convex or direct)
     if (taskId && convex) {
       convexMutation(api.tasks.updateAIProgress, {
         id: taskId,
@@ -47,6 +47,25 @@ export async function POST(request: NextRequest) {
         aiProgress: 10,
         aiResponseShort: "Task started...",
       }).catch(() => {});
+
+      // If reusing an existing session, link it to the task
+      if (existingSessionId) {
+        convexMutation(api.tasks.updateTask, {
+          id: taskId,
+          openclawSessionId: existingSessionId,
+        }).catch(() => {});
+      }
+    }
+    
+    // Also update in-memory store directly
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://ai-tasks-zeta.vercel.app'}/api/tasks`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: taskId, aiStatus: "running", aiProgress: 10 }),
+      });
+    } catch (e) {
+      console.log("Direct update failed:", e);
     }
 
     // Fire and forget - process in background
@@ -62,6 +81,9 @@ export async function POST(request: NextRequest) {
               "Authorization": `Bearer ${process.env.OPENCLAW_TOKEN}`
             }),
             "x-openclaw-agent-id": agent || "main",
+            ...(existingSessionId && {
+              "x-openclaw-session-id": existingSessionId
+            }),
           },
           body: JSON.stringify({
             model: "openclaw",
@@ -87,6 +109,24 @@ export async function POST(request: NextRequest) {
               aiResponseShort: assistantMessage.slice(0, 200),
             }).catch(() => {});
           }
+          
+          // Also update in-memory store directly
+          if (taskId) {
+            try {
+              await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://ai-tasks-zeta.vercel.app'}/api/tasks`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  id: taskId, 
+                  aiStatus: "completed", 
+                  aiProgress: 100,
+                  aiResponseShort: assistantMessage.slice(0, 200),
+                }),
+              });
+            } catch (e) {
+              console.log("Direct completion update failed:", e);
+            }
+          }
           return;
         }
       }
@@ -101,6 +141,23 @@ export async function POST(request: NextRequest) {
           aiBlockers: ["All OpenClaw URLs failed"],
         }).catch(() => {});
       }
+      
+      // Also update in-memory store directly
+      if (taskId) {
+        try {
+          await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://ai-tasks-zeta.vercel.app'}/api/tasks`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              id: taskId, 
+              aiStatus: "blocked",
+              aiProgress: 0,
+            }),
+          });
+        } catch (e) {
+          console.log("Direct blocked update failed:", e);
+        }
+      }
     }).catch(console.error);
 
     // Return immediately
@@ -109,6 +166,7 @@ export async function POST(request: NextRequest) {
       status: "running",
       message: "Task started. Poll for completion.",
       taskId,
+      sessionId: existingSessionId || undefined,
     });
 
   } catch (error: any) {

@@ -20,6 +20,10 @@ export default defineSchema({
     aiBlockers: v.optional(v.array(v.string())),
     scheduledAt: v.optional(v.number()),
     dependsOn: v.optional(v.array(v.string())),
+    // Subtask fields
+    parentTaskId: v.optional(v.string()), // ID of parent task (if this is a subtask)
+    isSubtask: v.optional(v.boolean()), // true if created as a subtask
+    createdBy: v.optional(v.string()), // "user" | "coordinator" | "researcher" | "writer" | "editor" — who created this task
     createdAt: v.number(),
     updatedAt: v.number(),
   }),
@@ -34,6 +38,18 @@ export default defineSchema({
     startedAt: v.number(),
     completedAt: v.optional(v.number()),
     blockers: v.optional(v.array(v.string())),
+  }),
+
+  sessions: defineTable({
+    sessionId: v.string(), // OpenClaw session UUID
+    name: v.string(), // Display name (usually task title)
+    agent: v.string(), // "researcher" | "writer" | "editor" | "coordinator"
+    status: v.string(), // "active" | "completed" | "failed"
+    taskCount: v.number(), // Number of tasks that used this session
+    lastTaskId: v.optional(v.string()), // Last task that used this session
+    lastTaskTitle: v.optional(v.string()), // For display
+    createdAt: v.number(),
+    updatedAt: v.number(),
   }),
 
   activities: defineTable({

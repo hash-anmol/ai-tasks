@@ -51,6 +51,26 @@ export async function POST(request: NextRequest) {
         id: taskId,
         openclawSessionId: String(sessionId),
       });
+
+      // Upsert session record for session picker
+      try {
+        const task = await convex.query(api.tasks.getTask as any, { id: taskId });
+        const sessionName = task?.title || prompt || "Untitled Session";
+        const sessionAgent = agent || task?.agent || "unknown";
+        const sessionStatus = normalizedStatus === "completed" ? "completed"
+          : normalizedStatus === "failed" ? "failed"
+          : "active";
+        await convexMutation(api.sessions.upsertSession, {
+          sessionId: String(sessionId),
+          name: sessionName,
+          agent: sessionAgent,
+          status: sessionStatus,
+          lastTaskId: String(taskId),
+          lastTaskTitle: task?.title || sessionName,
+        });
+      } catch (e) {
+        console.log("Session upsert error (non-fatal):", e);
+      }
     }
 
     const runAgent = agent || "unknown";

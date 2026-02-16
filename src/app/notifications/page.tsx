@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useNotifications } from "@/hooks/useNotifications";
 import BottomNav from "@/components/BottomNav";
+import AddTaskButton from "@/components/AddTaskButton";
 
 const AGENTS = [
   { id: "researcher", name: "Researcher", emoji: "🔍", color: "bg-blue-500" },
@@ -113,6 +114,7 @@ export default function NotificationsPage() {
         )}
       </div>
 
+      <AddTaskButton />
       <BottomNav />
     </div>
   );
