@@ -6,6 +6,7 @@ import path from "path";
 import os from "os";
 
 const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
+const PYTHON_BIN = "/usr/bin/python3";
 const VOICE_READ_SCRIPT =
   "/home/anmol/.openclaw/workspace/skills/voice-read/scripts/voice_read.py";
 const TTS_VOICE = "af_bella";
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
         try {
           // Use voice_read.py directly - it prints "Language: xx (prob)\n\nTranscribed text"
           const output = execSync(
-            `python3 "${VOICE_READ_SCRIPT}" "${audioInputPath}"`,
+            `${PYTHON_BIN} "${VOICE_READ_SCRIPT}" "${audioInputPath}"`,
             { timeout: 45000, encoding: "utf-8", env: { ...process.env, PATH: process.env.PATH } }
           );
 
@@ -213,7 +214,7 @@ export async function POST(request: NextRequest) {
 
           // Use Python to call Kokoro TTS with text from file
           execSync(
-            `python3 -c "
+            `${PYTHON_BIN} -c "
 import sys
 sys.path.insert(0, '/home/anmol/.local/bin')
 text = open('${textFilePath}').read()

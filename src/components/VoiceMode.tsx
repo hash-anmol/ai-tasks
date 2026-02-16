@@ -59,6 +59,13 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
     phaseRef.current = phase;
   }, [phase]);
 
+  useEffect(() => {
+    document.body.classList.add("voice-mode-active");
+    return () => {
+      document.body.classList.remove("voice-mode-active");
+    };
+  }, []);
+
   // Initialize Spotify embed when container mounts
   const spotifyRefCallback = useCallback(
     (node: HTMLDivElement | null) => {
@@ -123,14 +130,14 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
         spotify.pause();
       }
     } else if (isWaiting) {
-      // Resume/start Spotify when idle or waiting for AI
-      if (spotify.playerState === "paused") {
+      // Resume Spotify when idle or waiting for AI, but only if user already started it
+      if (spotify.playerState === "paused" && spotifyStarted) {
         spotify.resume();
-      } else if (spotify.playerState === "ready" && !spotifyStarted) {
-        // First time: auto-start playback
-        spotify.play();
-        setSpotifyStarted(true);
       }
+    }
+
+    if ((spotify.playerState === "playing" || spotify.playerState === "paused") && !spotifyStarted) {
+      setSpotifyStarted(true);
     }
   }, [phase, spotify.playerState, spotifyStarted, spotify]);
 
@@ -491,7 +498,7 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
           : "bg-blue-500/50";
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--background)] flex flex-col items-center justify-between overflow-hidden voice-mode-bg">
+      <div className="fixed inset-0 z-[70] bg-[var(--background)] flex flex-col items-center justify-between overflow-hidden voice-mode-bg">
       {/* Ambient glow */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div
@@ -660,8 +667,7 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
           {/* Spotify Embed iframe container — controlled by useSpotifyPlayer */}
           <div
             ref={spotifyRefCallback}
-            className="w-full [&>iframe]:rounded-2xl"
-            style={{ minHeight: 80 }}
+            className="w-full min-h-[120px] [&>iframe]:rounded-2xl [&>iframe]:min-h-[120px]"
           />
         </div>
       </div>

@@ -311,6 +311,39 @@
 
 ---
 
+## Update: Agent Workspaces + Execution Model (2026-02-16)
+
+### Agent Workspace Separation
+- [ ] Move AI Tasks agent profiles out of `/workspace/ai-tasks/agents/`
+- [ ] Create dedicated workspaces:
+  - `/home/anmol/.openclaw/workspace-researcher/`
+  - `/home/anmol/.openclaw/workspace-writer/`
+  - `/home/anmol/.openclaw/workspace-editor/`
+  - `/home/anmol/.openclaw/workspace-coordinator/`
+- [ ] Each workspace contains: `SOUL.md`, `AGENTS.md`, `memory/`
+- [ ] Coordinator can read other agents' `SOUL.md` files
+
+### Coordinator Responsibilities (Refined)
+- [ ] Delegates work and creates subtasks in UI
+- [ ] Monitors progress only (does not execute other agents' work)
+- [ ] Uses a flexible, task-adaptive decomposition approach
+
+### Hybrid Execution Model (Smart Sequencing)
+- [ ] Coordinator determines dependencies and sets `dependsOn`
+- [ ] Independent subtasks run in parallel
+- [ ] Dependent subtasks start only after prerequisites complete
+- [ ] No max timeouts; manual control remains with user
+
+### Convex Sync Strategy (Webhook-Driven)
+- [ ] OpenClaw sends progress + completion updates to webhook
+- [ ] Webhook updates Convex (source of truth for UI)
+- [ ] UI shows progress, tool calls, and responses in detail view
+
+### Completed (Current Session)
+- [x] Add `AddTaskButton` + `BottomNav` to all app pages
+
+---
+
 ## Testing Standards (Per Task)
 
 Every task must have:

@@ -64,6 +64,13 @@ export function useVoiceRecorder() {
     chunksRef.current = [];
 
     try {
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+        setError(
+          "Microphone API unavailable. Use HTTPS or localhost, and allow microphone access."
+        );
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,

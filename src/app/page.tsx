@@ -7,7 +7,8 @@ import KanbanBoard from "@/components/KanbanBoard";
 import Chat from "@/components/Chat";
 
 import AddTaskButton from "@/components/AddTaskButton";
-import BottomNav from "@/components/BottomNav";
+import Menu from "@/components/Menu";
+import VoiceMode from "@/components/VoiceMode";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -109,6 +110,7 @@ function TabNavigation({
 function PageContent() {
   const searchParams = useSearchParams();
   const [view, setView] = useState("list");
+  const [voiceModeOpen, setVoiceModeOpen] = useState(false);
   
   // Derive initial tab from URL params
   const tabParam = searchParams.get("tab");
@@ -143,6 +145,14 @@ function PageContent() {
     window.history.replaceState({}, "", `/?tab=${tab}`);
   };
 
+  const handleChatClick = () => {
+    handleMainTabChange("chat");
+  };
+
+  const handleVoiceClick = () => {
+    setVoiceModeOpen(true);
+  };
+
   return (
     <div className="h-screen overflow-hidden relative flex flex-col bg-[var(--background)]">
       {/* Header */}
@@ -166,14 +176,25 @@ function PageContent() {
           view === "kanban" ? (
             <KanbanBoard />
           ) : (
-            <TaskList agentFilter={agentFilter} activeTab={subTab} />
+            <TaskList agentFilter={agentFilter} activeTab={subTab} onChatClick={handleChatClick} />
           )
         )}
       </main>
 
-      {/* Add task button & bottom nav */}
-      <AddTaskButton />
-      <BottomNav />
+      {!voiceModeOpen && (
+        <>
+          {/* Add task button */}
+          <AddTaskButton />
+
+          {/* Hamburger Menu */}
+          <Menu onChatClick={handleChatClick} onVoiceClick={handleVoiceClick} />
+        </>
+      )}
+
+      {/* Voice Mode Overlay */}
+      {voiceModeOpen && (
+        <VoiceMode onClose={() => setVoiceModeOpen(false)} />
+      )}
 
       {/* Ambient background gradients */}
       <div className="fixed top-0 left-0 w-full h-full pointer-events-none -z-10 overflow-hidden">

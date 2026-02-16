@@ -19,7 +19,7 @@ export async function GET() {
     
     // Filter for AI tasks with pending status
     const pending = allTasks
-      .filter((t: any) => t.isAI && (t.aiStatus === "pending" || !t.aiStatus))
+      .filter((t: any) => t.isAI && t.aiStatus === "pending")
       .map((t: any) => ({
         id: t._id,
         title: t.title,

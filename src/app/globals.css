@@ -161,6 +161,10 @@ body {
   background: var(--background);
 }
 
+body.voice-mode-active .voice-mode-hide {
+  display: none !important;
+}
+
 /* Pulse ring - expanding circles around the record button */
 @keyframes voice-pulse {
   0% {

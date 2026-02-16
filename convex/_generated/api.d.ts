@@ -9,6 +9,7 @@
  */
 
 import type * as agentRuns from "../agentRuns.js";
+import type * as sessions from "../sessions.js";
 import type * as tasks from "../tasks.js";
 
 import type {
@@ -19,6 +20,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   agentRuns: typeof agentRuns;
+  sessions: typeof sessions;
   tasks: typeof tasks;
 }>;
 
