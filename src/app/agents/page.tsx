@@ -37,6 +37,81 @@ interface Task {
   status?: string;
 }
 
+interface Session {
+  _id: string;
+  sessionId: string;
+  name: string;
+  agent: string;
+  status: string;
+  taskCount: number;
+  lastTaskId?: string;
+  lastTaskTitle?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+// Simple session list component
+function SessionList() {
+  const sessions = (useQuery(api.sessions.getSessions) || []) as Session[];
+  
+  const formatTime = (ts: number) => {
+    const d = new Date(ts);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const mins = Math.floor(diffMs / 60000);
+    const hours = Math.floor(diffMs / 3600000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
+  if (sessions.length === 0) {
+    return (
+      <div className="text-center py-8 opacity-40">
+        <span className="material-icons text-3xl">history</span>
+        <p className="text-[var(--text-secondary)] mt-2 text-sm">No sessions yet</p>
+        <p className="text-[var(--text-secondary)] text-xs mt-1">Sessions are created when you run AI tasks</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {sessions
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, 10)
+        .map((session) => (
+          <div
+            key={session._id}
+            className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-lg flex-shrink-0">
+                {AGENTS_CONFIG.find(a => a.id === session.agent)?.emoji || "🤖"}
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                  {session.name}
+                </p>
+                <p className="text-[11px] text-[var(--text-secondary)]">
+                  {session.taskCount} task{session.taskCount !== 1 ? "s" : ""} • {formatTime(session.updatedAt)}
+                </p>
+              </div>
+            </div>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 ${
+              session.status === "active" ? "bg-blue-500/20 text-blue-500" :
+              session.status === "completed" ? "bg-green-500/20 text-green-500" :
+              "bg-red-500/20 text-red-500"
+            }`}>
+              {session.status}
+            </span>
+          </div>
+        ))}
+    </div>
+  );
+}
+
 const AGENTS_CONFIG = [
   { id: "researcher", name: "Researcher", emoji: "🔍" },
   { id: "writer", name: "Writer", emoji: "✍️" },
@@ -269,6 +344,12 @@ export default function AgentsPage() {
             </div>
           </div>
         )}
+
+        {/* Sessions Section */}
+        <div className="mt-8">
+          <h2 className="font-display text-lg text-[var(--text-primary)] mb-4">Recent Sessions</h2>
+          <SessionList />
+        </div>
       </main>
 
       <AddTaskButton />
