@@ -12,6 +12,13 @@ export async function POST(request: NextRequest) {
     const OPENCLAW_TOKEN = (process.env.OPENCLAW_TOKEN || "").trim();
     const OPENCLAW_PASSWORD = (process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD || "").trim();
     const AUTH_VAL = OPENCLAW_TOKEN || OPENCLAW_PASSWORD;
+    const authSource = OPENCLAW_TOKEN ? "token" : OPENCLAW_PASSWORD ? "password" : "none";
+    console.info("[openclaw.chat] auth debug", {
+      authSource,
+      authLength: AUTH_VAL.length,
+      tokenLength: OPENCLAW_TOKEN.length,
+      passwordLength: OPENCLAW_PASSWORD.length,
+    });
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -25,6 +32,7 @@ export async function POST(request: NextRequest) {
 
     for (const baseUrl of urls) {
       try {
+        console.info("[openclaw.chat] baseUrl", { baseUrl });
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
         };
