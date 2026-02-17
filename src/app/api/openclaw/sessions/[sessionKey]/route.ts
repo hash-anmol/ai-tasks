@@ -7,9 +7,9 @@ const OPENCLAW_PASSWORD = process.env.OPENCLAW_PASSWORD;
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { sessionKey: string } },
+  { params }: { params: Promise<{ sessionKey: string }> },
 ) {
-  const sessionKey = params.sessionKey;
+  const { sessionKey } = await params;
   if (!sessionKey) {
     return NextResponse.json({ error: "Session key required" }, { status: 400 });
   }
