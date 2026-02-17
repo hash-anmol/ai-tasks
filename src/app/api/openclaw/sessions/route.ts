@@ -5,7 +5,7 @@ import {
 } from "@/lib/openclawGatewayServer";
 
 const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
-const OPENCLAW_PASSWORD = process.env.OPENCLAW_PASSWORD;
+const OPENCLAW_PASSWORD = process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD;
 
 export async function GET() {
   const urls = getOpenClawUrls();
@@ -19,6 +19,7 @@ export async function GET() {
           includeGlobal: true,
           includeUnknown: true,
           limit: 200,
+          timeoutMs: 30000,
         },
         { token: OPENCLAW_TOKEN, password: OPENCLAW_PASSWORD },
       );

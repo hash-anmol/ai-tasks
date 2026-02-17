@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOpenClawUrls } from "@/lib/openclaw";
 
 const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
+const OPENCLAW_PASSWORD = process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD;
 
 /**
  * POST /api/openclaw/chat
@@ -39,8 +40,8 @@ export async function POST(request: NextRequest) {
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
         };
-        if (OPENCLAW_TOKEN) {
-          headers["Authorization"] = `Bearer ${OPENCLAW_TOKEN}`;
+        if (OPENCLAW_TOKEN || OPENCLAW_PASSWORD) {
+          headers["Authorization"] = `Bearer ${OPENCLAW_TOKEN || OPENCLAW_PASSWORD}`;
         }
         if (agentId) {
           headers["x-openclaw-agent-id"] = agentId;
@@ -308,8 +309,8 @@ export async function GET() {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
-      if (OPENCLAW_TOKEN) {
-        headers["Authorization"] = `Bearer ${OPENCLAW_TOKEN}`;
+      if (OPENCLAW_TOKEN || OPENCLAW_PASSWORD) {
+        headers["Authorization"] = `Bearer ${OPENCLAW_TOKEN || OPENCLAW_PASSWORD}`;
       }
       const res = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: "POST",

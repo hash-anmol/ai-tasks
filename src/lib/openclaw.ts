@@ -3,8 +3,8 @@
  * Connects AI Tasks app to OpenClaw gateway
  */
 
-const DEFAULT_OPENCLAW_URL = "http://127.0.0.1:18789";
 const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
+const OPENCLAW_PASSWORD = process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD;
 
 interface OpenClawSession {
   sessionId: string;
@@ -29,16 +29,20 @@ export function normalizeOpenClawUrls(input?: string | string[]) {
     normalized.push(trimmed);
   }
   if (normalized.length === 0) {
-    normalized.push(DEFAULT_OPENCLAW_URL);
+    normalized.push("http://127.0.0.1:18789");
   }
   return normalized;
 }
 
 export function getOpenClawUrls() {
-  return normalizeOpenClawUrls([
-    process.env.OPENCLAW_URL || process.env.NEXT_PUBLIC_OPENCLAW_URL || "",
-    ...(process.env.OPENCLAW_FALLBACK_URLS ? process.env.OPENCLAW_FALLBACK_URLS.split(",") : []),
-  ]);
+  const primary = process.env.OPENCLAW_URL || process.env.NEXT_PUBLIC_OPENCLAW_URL;
+  const fallbacks = process.env.OPENCLAW_FALLBACK_URLS ? process.env.OPENCLAW_FALLBACK_URLS.split(",") : [];
+  
+  const all = [];
+  if (primary) all.push(primary);
+  all.push(...fallbacks);
+  
+  return normalizeOpenClawUrls(all);
 }
 
 /**
@@ -57,7 +61,7 @@ export async function executeTaskWithOpenClaw(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(OPENCLAW_TOKEN && { Authorization: `Bearer ${OPENCLAW_TOKEN}` }),
+          ...( (OPENCLAW_TOKEN || OPENCLAW_PASSWORD) && { Authorization: `Bearer ${OPENCLAW_TOKEN || OPENCLAW_PASSWORD}` }),
         },
         body: JSON.stringify({
           message: prompt,
@@ -94,7 +98,7 @@ export async function getSessionStatus(sessionId: string): Promise<{
     try {
       const response = await fetch(`${baseUrl}/api/sessions/${sessionId}`, {
         headers: {
-          ...(OPENCLAW_TOKEN && { Authorization: `Bearer ${OPENCLAW_TOKEN}` }),
+          ...( (OPENCLAW_TOKEN || OPENCLAW_PASSWORD) && { Authorization: `Bearer ${OPENCLAW_TOKEN || OPENCLAW_PASSWORD}` }),
         },
       });
 
@@ -126,7 +130,7 @@ export async function sendMessageToSession(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(OPENCLAW_TOKEN && { Authorization: `Bearer ${OPENCLAW_TOKEN}` }),
+          ...( (OPENCLAW_TOKEN || OPENCLAW_PASSWORD) && { Authorization: `Bearer ${OPENCLAW_TOKEN || OPENCLAW_PASSWORD}` }),
         },
         body: JSON.stringify({ message }),
       });

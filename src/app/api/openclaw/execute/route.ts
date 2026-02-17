@@ -89,12 +89,14 @@ export async function POST(request: NextRequest) {
         sessionId: existingSessionId || null,
       }).catch(() => {});
       
+      const openClawToken = process.env.OPENCLAW_TOKEN || process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD;
+      
       fetch(`${baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(process.env.OPENCLAW_TOKEN && {
-            "Authorization": `Bearer ${process.env.OPENCLAW_TOKEN}`
+          ...(openClawToken && {
+            "Authorization": `Bearer ${openClawToken}`
           }),
           "x-openclaw-agent-id": agent || "main",
           ...(existingSessionId && {

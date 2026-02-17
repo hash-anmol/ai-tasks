@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getOpenClawUrls } from "@/lib/openclaw";
 
 const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
+const OPENCLAW_PASSWORD = process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD;
 const TTS_VOICE = "af_bella";
 
 /**
@@ -119,11 +120,13 @@ export async function POST(request: NextRequest) {
               { role: "user", content: transcription }
             ];
 
+            const openClawToken = OPENCLAW_TOKEN || OPENCLAW_PASSWORD;
+
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                ...(OPENCLAW_TOKEN ? { Authorization: `Bearer ${OPENCLAW_TOKEN}` } : {}),
+                ...(openClawToken ? { Authorization: `Bearer ${openClawToken}` } : {}),
               },
               body: JSON.stringify({
                 model: "openclaw",
