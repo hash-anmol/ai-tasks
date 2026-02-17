@@ -16,6 +16,8 @@ export async function POST(request: NextRequest) {
     console.info("[openclaw.chat] auth debug", {
       authSource,
       authLength: AUTH_VAL.length,
+      tokenFirst5: OPENCLAW_TOKEN.slice(0, 5),
+      tokenLast5: OPENCLAW_TOKEN.slice(-5),
       tokenLength: OPENCLAW_TOKEN.length,
       passwordLength: OPENCLAW_PASSWORD.length,
     });
