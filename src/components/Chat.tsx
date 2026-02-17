@@ -1,9 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import VoiceMode from "./VoiceMode";
+import {
+  filterSessionsByAgent,
+  getSessionDisplayName,
+  type GatewaySessionRow,
+} from "@/lib/openclawGateway";
 
 const AGENTS = [
   { id: "researcher", name: "Researcher", emoji: "🔍" },
@@ -11,17 +16,6 @@ const AGENTS = [
   { id: "editor", name: "Editor", emoji: "📝" },
   { id: "coordinator", name: "Coordinator", emoji: "🎯" },
 ];
-
-interface Session {
-  _id: string;
-  sessionId: string;
-  name: string;
-  agent: string;
-  status: string;
-  taskCount: number;
-  lastTaskTitle?: string;
-  updatedAt: number;
-}
 
 interface ToolCallInfo {
   id: string;
@@ -63,19 +57,6 @@ Rules for task creation:
 - If the user's request is ambiguous, ask for clarification before creating tasks
 
 Important: You MUST wrap the JSON in [CREATE_TASK] and [/CREATE_TASK] markers. Do NOT just describe creating a task - actually include the markers so the system can create it.`;
-
-const DELEGATION_SYSTEM_PROMPT = `You are a coordinator AI agent. When the user asks you to do something, break it into subtasks and delegate them to specialized agents (researcher, writer, editor). 
-
-When creating delegated tasks, use [CREATE_TASK]...[/CREATE_TASK] blocks with the appropriate "agent" field:
-- "researcher" for information gathering, research, analysis
-- "writer" for content creation, drafting, writing
-- "editor" for reviewing, proofreading, refinement
-
-[CREATE_TASK]
-{"title": "Task title", "description": "Description", "priority": "medium", "agent": "researcher", "tags": ["delegated"]}
-[/CREATE_TASK]
-
-Explain your delegation plan and create the tasks.`;
 
 // Parse [CREATE_TASK]...[/CREATE_TASK] blocks from AI response
 function parseTaskBlocks(content: string): { title: string; description?: string; priority?: string; agent?: string; tags?: string[] }[] {
@@ -177,6 +158,7 @@ function FileAttachmentBlock({ attachments }: { attachments: FileAttachment[] })
           </a>
         ))}
       </div>
+
     </div>
   );
 }
@@ -274,7 +256,6 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [delegationMode, setDelegationMode] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [voiceModeOpen, setVoiceModeOpen] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -284,6 +265,10 @@ export default function Chat() {
   });
   const [selectedAgent, setSelectedAgent] = useState<string | undefined>(undefined);
   const [selectedSessionId, setSelectedSessionId] = useState<string>("new");
+  const [sessions, setSessions] = useState<GatewaySessionRow[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messageQueueRef = useRef<string[]>([]);
@@ -291,13 +276,11 @@ export default function Chat() {
   // Convex mutation for creating tasks
   const createTask = useMutation(api.tasks.createTask);
 
-  // Convex query for sessions (filtered by selected agent)
-  const allSessions = (useQuery(api.sessions.getSessions) || []) as Session[];
-  const agentSessions = selectedAgent
-    ? allSessions
-        .filter((s) => s.agent === selectedAgent)
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-    : [];
+  const agentSessions = filterSessionsByAgent(sessions, selectedAgent).sort((a, b) => {
+    const aTime = a.updatedAt ?? 0;
+    const bTime = b.updatedAt ?? 0;
+    return bTime - aTime;
+  });
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -314,6 +297,105 @@ export default function Chat() {
       .then((data) => setConnected(data.connected ?? false))
       .catch(() => setConnected(false));
   }, []);
+
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    setSessionsError(null);
+    try {
+      const res = await fetch("/api/openclaw/sessions");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to load sessions (${res.status})`);
+      }
+      const data = await res.json();
+      const next = Array.isArray(data.sessions) ? (data.sessions as GatewaySessionRow[]) : [];
+      setSessions(next);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load sessions";
+      setSessionsError(msg);
+      setSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
+
+  const extractMessageText = (message: unknown): string => {
+    if (!message || typeof message !== "object") return "";
+    const entry = message as {
+      content?: unknown;
+      text?: unknown;
+    };
+    if (typeof entry.content === "string") return entry.content;
+    if (Array.isArray(entry.content)) {
+      const parts: string[] = [];
+      for (const part of entry.content) {
+        if (!part || typeof part !== "object") continue;
+        const block = part as { type?: string; text?: string };
+        if (
+          (block.type === "text" || block.type === "input_text" || block.type === "output_text") &&
+          typeof block.text === "string" &&
+          block.text.trim()
+        ) {
+          parts.push(block.text);
+        }
+      }
+      return parts.join("\n\n");
+    }
+    if (typeof entry.text === "string") return entry.text;
+    return "";
+  };
+
+  const loadSessionHistory = useCallback(
+    async (sessionKey: string) => {
+      setHistoryLoading(true);
+      setError(null);
+      setMessages([]);
+      try {
+        const res = await fetch(
+          `/api/openclaw/sessions/${encodeURIComponent(sessionKey)}?limit=200`
+        );
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Failed to load history (${res.status})`);
+        }
+        const data = await res.json();
+        const rawMessages = Array.isArray(data.messages) ? data.messages : [];
+        const parsed = rawMessages
+          .map((msg: unknown, index: number) => {
+            if (!msg || typeof msg !== "object") return null;
+            const entry = msg as { role?: string; timestamp?: number };
+            const role = entry.role === "user" ? "user" : "assistant";
+            const content = extractMessageText(msg);
+            if (!content) return null;
+            return {
+              id: `history-${entry.timestamp ?? Date.now()}-${index}`,
+              role,
+              content,
+              timestamp: typeof entry.timestamp === "number" ? entry.timestamp : Date.now(),
+            } as ChatMessage;
+          })
+          .filter((msg: ChatMessage | null): msg is ChatMessage => msg !== null);
+        setMessages(parsed);
+        setSelectedSessionId(sessionKey);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Failed to load session history";
+        setError(msg);
+      } finally {
+        setHistoryLoading(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (selectedSessionId && selectedSessionId !== "new") {
+      loadSessionHistory(selectedSessionId);
+    }
+  }, [selectedSessionId, loadSessionHistory]);
 
   // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -374,9 +456,7 @@ export default function Chat() {
     const toolCallsAccum: ToolCallInfo[] = [];
 
     try {
-      const systemPrompt = delegationMode
-        ? DELEGATION_SYSTEM_PROMPT
-        : TASK_CREATION_SYSTEM_PROMPT;
+      const systemPrompt = TASK_CREATION_SYSTEM_PROMPT;
 
       const apiMessages = [
         { role: "system", content: systemPrompt },
@@ -389,7 +469,7 @@ export default function Chat() {
         body: JSON.stringify({
           messages: apiMessages,
           agentId: selectedAgent,
-          sessionId: selectedSessionId !== "new" ? selectedSessionId : undefined,
+          sessionKey: selectedSessionId !== "new" ? selectedSessionId : undefined,
         }),
       });
 
@@ -709,7 +789,7 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* Chat header row 2: Agent selector + Session selector + Delegation toggle */}
+      {/* Chat header row 2: Agent selector + Session selector */}
       <div className="flex items-center gap-2 mb-3">
         {/* Agent selector */}
         <select
@@ -733,32 +813,30 @@ export default function Chat() {
             className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-blue-500 focus:outline-none text-[12px] font-light text-[var(--text-primary)] truncate"
           >
             <option value="new">+ New Session</option>
+            {sessionsLoading && (
+              <option disabled value="loading">
+                Loading sessions...
+              </option>
+            )}
             {agentSessions.map((session) => {
-              const timeAgo = getTimeAgo(session.updatedAt);
-              const statusIcon = session.status === "active" ? "\u25CF" : session.status === "completed" ? "\u2713" : "\u2715";
+              const timeAgo = session.updatedAt ? getTimeAgo(session.updatedAt) : "unknown";
+              const label = getSessionDisplayName(session);
               return (
-                <option key={session.sessionId} value={session.sessionId}>
-                  {statusIcon} {session.name} ({session.taskCount} task{session.taskCount !== 1 ? "s" : ""}, {timeAgo})
+                <option key={session.key} value={session.key}>
+                  {label} ({timeAgo})
                 </option>
               );
             })}
           </select>
         )}
 
-        {/* Delegation toggle - compact */}
-        <button
-          onClick={() => setDelegationMode(!delegationMode)}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border transition-all text-[12px] font-medium flex-shrink-0 ${
-            delegationMode
-              ? "border-blue-500 bg-blue-500/10 text-blue-500"
-              : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-          }`}
-          title="Delegation Mode - Break tasks into subtasks for specialized agents"
-        >
-          <span className="material-icons text-[14px]">account_tree</span>
-          <span className="hidden sm:inline">Delegate</span>
-        </button>
       </div>
+
+      {sessionsError && selectedAgent && (
+        <div className="mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-500">
+          {sessionsError}
+        </div>
+      )}
 
       {/* Session context hint */}
       {selectedAgent && selectedSessionId !== "new" && (
@@ -770,7 +848,7 @@ export default function Chat() {
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto hide-scrollbar space-y-3 pb-4">
-        {messages.length === 0 && !isLoading && (
+        {messages.length === 0 && !isLoading && !historyLoading && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <span className="material-icons text-4xl text-[var(--border)] mb-3 opacity-30">chat</span>
             <p className="text-[var(--text-primary)] text-sm font-light mb-1 opacity-80">Chat with your AI agent</p>
@@ -782,6 +860,14 @@ export default function Chat() {
                 OpenClaw not reachable. Check that the server is running.
               </div>
             )}
+          </div>
+        )}
+
+        {historyLoading && (
+          <div className="flex justify-center">
+            <span className="text-[11px] text-[var(--text-secondary)] opacity-60 font-light">
+              Loading session history...
+            </span>
           </div>
         )}
 

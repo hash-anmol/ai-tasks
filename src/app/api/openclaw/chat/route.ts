@@ -22,7 +22,7 @@ const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { messages, agentId, sessionId } = body;
+  const { messages, agentId, sessionId, sessionKey } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -45,8 +45,9 @@ export async function POST(request: NextRequest) {
         if (agentId) {
           headers["x-openclaw-agent-id"] = agentId;
         }
-        if (sessionId) {
-          headers["x-openclaw-session-id"] = sessionId;
+        const effectiveSessionKey = sessionKey ?? sessionId;
+        if (effectiveSessionKey) {
+          headers["x-openclaw-session-key"] = effectiveSessionKey;
         }
 
         const upstreamRes = await fetch(`${baseUrl}/v1/chat/completions`, {
