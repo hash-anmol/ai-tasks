@@ -19,9 +19,12 @@ export async function GET() {
           includeGlobal: true,
           includeUnknown: true,
           limit: 200,
-          timeoutMs: 30000,
         },
-        { token: OPENCLAW_TOKEN, password: OPENCLAW_PASSWORD },
+        { 
+          token: OPENCLAW_TOKEN, 
+          password: OPENCLAW_PASSWORD,
+          timeoutMs: 30000 
+        },
       );
       return NextResponse.json(result);
     } catch (error) {

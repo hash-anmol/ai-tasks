@@ -3,7 +3,7 @@ import { getOpenClawUrls } from "@/lib/openclaw";
 import { requestGatewayChatHistory } from "@/lib/openclawGatewayServer";
 
 const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
-const OPENCLAW_PASSWORD = process.env.OPENCLAW_PASSWORD;
+const OPENCLAW_PASSWORD = process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD;
 
 export async function GET(
   request: NextRequest,
