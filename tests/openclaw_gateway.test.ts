@@ -81,6 +81,18 @@ describe("openclaw gateway helpers", () => {
     ]);
   });
 
+  it("includes non-agent sessions for main", () => {
+    const sessions: GatewaySessionRow[] = [
+      { key: "main", kind: "direct", updatedAt: 1 },
+      { key: "agent:main:openai:abc", kind: "direct", updatedAt: 2 },
+      { key: "agent:writer:openai:b", kind: "direct", updatedAt: 3 },
+    ];
+    expect(filterSessionsByAgent(sessions, "main").map((s) => s.key)).toEqual([
+      "main",
+      "agent:main:openai:abc",
+    ]);
+  });
+
   it("returns all sessions when no agent filter provided", () => {
     const sessions: GatewaySessionRow[] = [
       { key: "agent:coordinator:openai:a", kind: "direct", updatedAt: 1 },

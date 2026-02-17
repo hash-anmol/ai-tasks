@@ -33,6 +33,28 @@ export async function GET(request: NextRequest) {
       (convex as any).setAdminAuth(convexAdminKey);
     }
 
+    // Mark stale running tasks as blocked (1-2 hour timeout)
+    try {
+      const allTasks = await convex.query(api.tasks.getTasks as any);
+      const now = Date.now();
+      const timeoutMs = 2 * 60 * 60 * 1000;
+      for (const t of allTasks) {
+        if (t.aiStatus === "running" && typeof t.aiStartedAt === "number") {
+          if (now - t.aiStartedAt > timeoutMs) {
+            await convex.mutation(api.tasks.updateAIProgress, {
+              id: t._id,
+              aiStatus: "blocked",
+              aiProgress: t.aiProgress || 0,
+              aiResponseShort: "Agent timed out after 2 hours",
+              aiBlockers: ["heartbeat-timeout"],
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.log("Heartbeat timeout sweep failed (non-fatal):", e);
+    }
+
     // Query Convex for ready heartbeat tasks for this agent
     const readyTasks = await convex.query(api.tasks.getHeartbeatTasks, {
       agent,
@@ -51,6 +73,18 @@ export async function GET(request: NextRequest) {
       (a, b) => a.createdAt - b.createdAt
     );
     const task = sorted[0];
+
+    // Mark task as running (best-effort, no locking)
+    try {
+      await convex.mutation(api.tasks.updateAIProgress, {
+        id: task._id,
+        aiStatus: "running",
+        aiProgress: 5,
+        aiResponseShort: `Picked up by ${agent}`,
+      });
+    } catch (e) {
+      console.log("Heartbeat update error (non-fatal):", e);
+    }
 
     return NextResponse.json({
       hasTask: true,

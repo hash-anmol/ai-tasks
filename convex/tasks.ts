@@ -66,6 +66,7 @@ export const getSubtasks = query({
 export const getHeartbeatTasks = query({
   args: { agent: v.string() },
   handler: async (ctx, args) => {
+    const now = Date.now();
     // Get all pending tasks assigned to this agent via heartbeat
     const candidates = await ctx.db
       .query("tasks")
@@ -80,6 +81,9 @@ export const getHeartbeatTasks = query({
     // Filter out tasks whose dependencies aren't all completed
     const readyTasks = [];
     for (const task of candidates) {
+      if (typeof task.scheduledAt === "number" && task.scheduledAt > now) {
+        continue;
+      }
       if (!task.dependsOn || task.dependsOn.length === 0) {
         readyTasks.push(task);
         continue;
@@ -130,7 +134,7 @@ export const createTask = mutation({
     const taskId = await ctx.db.insert("tasks", {
       ...args,
       aiStatus: args.isAI ? "pending" : undefined,
-      aiStartedAt: args.isAI ? Date.now() : undefined,
+      aiStartedAt: undefined,
       aiProgress: args.isAI ? 0 : undefined,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -200,6 +204,7 @@ export const updateAIProgress = mutation({
   handler: async (ctx, args) => {
     const { id, aiStatus, ...updates } = args;
     const now = Date.now();
+    const startFields = aiStatus === "running" ? { aiStartedAt: now } : {};
     // Set completed timestamp when AI finishes
     const completionFields = (aiStatus === "completed" || aiStatus === "failed") 
       ? { aiCompletedAt: now }
@@ -207,6 +212,7 @@ export const updateAIProgress = mutation({
     await ctx.db.patch(id, {
       aiStatus,
       ...updates,
+      ...startFields,
       ...completionFields,
       updatedAt: now,
     });

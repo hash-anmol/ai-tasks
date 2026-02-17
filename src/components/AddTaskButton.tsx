@@ -90,16 +90,19 @@ export default function AddTaskButton() {
     setIsSubmitting(true);
 
     try {
+      const scheduledAt = dueDate ? new Date(dueDate).getTime() : undefined;
       const taskId = await createTask({
         title: title.trim(),
         description: description.trim() || undefined,
         status: isAI ? "assigned" : "inbox",
         priority,
-        dueDate: dueDate ? new Date(dueDate).getTime() : undefined,
+        dueDate: scheduledAt,
         tags: [],
         isAI,
         agent: isAI ? agent : undefined,
         dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
+        scheduledAt,
+        heartbeatAgentId: isAI && scheduledAt ? agent : undefined,
       } as any);
 
       // Close modal and reset form immediately
@@ -120,10 +123,8 @@ export default function AddTaskButton() {
       setIsOpen(false);
       setIsSubmitting(false);
 
-      // Fire-and-forget: send to OpenClaw in the background
-      // The execute endpoint already processes asynchronously and updates
-      // task status via Convex mutations when complete
-      if (savedIsAI && taskId) {
+      // Immediate execution for unscheduled AI tasks
+      if (savedIsAI && taskId && !scheduledAt && savedAgent) {
         fetch("/api/openclaw/execute", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -135,9 +136,11 @@ export default function AddTaskButton() {
             sessionId: savedSessionId,
           }),
         }).catch((err) => {
-          console.log("OpenClaw queue error (background):", err);
+          console.log("OpenClaw execute error (background):", err);
         });
       }
+
+      // Scheduled tasks run via heartbeat
 
       return;
     } catch (err) {

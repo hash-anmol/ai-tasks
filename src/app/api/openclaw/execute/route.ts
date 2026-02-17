@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@convex/_generated/api";
 import { getOpenClawUrls } from "@/lib/openclaw";
+import { logOpenClaw } from "@/lib/openclawLogger";
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,6 +10,12 @@ export async function POST(request: NextRequest) {
     const { title, description, agent, taskId, sessionId: existingSessionId } = body;
 
     console.log("Executing AI task:", { title, agent, taskId });
+    await logOpenClaw("info", "execute.request", "Execute AI task", {
+      title: String(title || ""),
+      agent: agent || "main",
+      taskId: taskId || null,
+      sessionId: existingSessionId || null,
+    });
 
     const trimmedTitle = String(title).trim();
     if (!trimmedTitle) {
@@ -68,111 +75,45 @@ export async function POST(request: NextRequest) {
       console.log("Direct update failed:", e);
     }
 
-    // Fire and forget - process in background
+    // Fire and forget - process in background (no waiting, Vercel has 60s timeout)
+    // OpenClaw will call webhook with progress updates
     const openClawUrls = getOpenClawUrls();
     
-    Promise.allSettled(
-      openClawUrls.map(async (baseUrl) => {
-        const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(process.env.OPENCLAW_TOKEN && {
-              "Authorization": `Bearer ${process.env.OPENCLAW_TOKEN}`
-            }),
-            "x-openclaw-agent-id": agent || "main",
-            ...(existingSessionId && {
-              "x-openclaw-session-id": existingSessionId
-            }),
-          },
-          body: JSON.stringify({
-            model: "openclaw",
-            messages: [{ role: "user", content: prompt }],
+    // Just fire the request - don't wait for response
+    // OpenClaw gateway will call our webhook with updates
+    for (const baseUrl of openClawUrls) {
+      logOpenClaw("info", "execute.dispatch", "Dispatch to OpenClaw (fire-and-forget)", {
+        baseUrl,
+        agent: agent || "main",
+        taskId: taskId || null,
+        sessionId: existingSessionId || null,
+      }).catch(() => {});
+      
+      fetch(`${baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(process.env.OPENCLAW_TOKEN && {
+            "Authorization": `Bearer ${process.env.OPENCLAW_TOKEN}`
           }),
-          signal: AbortSignal.timeout(120000),
+          "x-openclaw-agent-id": agent || "main",
+          ...(existingSessionId && {
+            "x-openclaw-session-id": existingSessionId
+          }),
+        },
+        body: JSON.stringify({
+          model: "openclaw",
+          messages: [{ role: "user", content: prompt }],
+        }),
+      }).catch(async (err) => {
+        await logOpenClaw("error", "execute.dispatch.error", "Dispatch failed", {
+          baseUrl,
+          agent: agent || "main",
+          taskId: taskId || null,
+          error: String(err),
         });
-        return { response, baseUrl };
-      })
-    ).then(async (results) => {
-      for (const result of results) {
-        if (result.status === "fulfilled" && result.value?.response?.ok) {
-          const resultJson = await result.value.response.json();
-          const assistantMessage = resultJson.choices?.[0]?.message?.content || "";
-          console.log("OpenClaw response:", assistantMessage.slice(0, 100));
-          
-          if (taskId && convex) {
-            convexMutation(api.tasks.updateAIProgress, {
-              id: taskId,
-              aiStatus: "completed",
-              aiProgress: 100,
-              aiResponse: assistantMessage,
-              aiResponseShort: assistantMessage.slice(0, 200),
-            }).catch(() => {});
-          }
-          
-          // Also update in-memory store directly
-          if (taskId) {
-            try {
-              await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://ai-tasks-zeta.vercel.app'}/api/tasks`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                  id: taskId, 
-                  aiStatus: "completed", 
-                  aiProgress: 100,
-                  aiResponseShort: assistantMessage.slice(0, 200),
-                }),
-              });
-            } catch (e) {
-              console.log("Direct completion update failed:", e);
-            }
-          }
-          return;
-        }
-      }
-      
-      // All failed - capture detailed error reasons
-      const errorReasons: string[] = [];
-      for (const result of results) {
-        if (result.status === "fulfilled") {
-          const { response, baseUrl } = result.value;
-          if (!response.ok) {
-            errorReasons.push(`${baseUrl}: HTTP ${response.status}`);
-          }
-        } else if (result.status === "rejected") {
-          errorReasons.push(`Promise rejected: ${result.reason}`);
-        }
-      }
-      
-      console.error("OpenClaw execution failed:", errorReasons);
-      
-      if (convex && taskId) {
-        convexMutation(api.tasks.updateAIProgress, {
-          id: taskId,
-          aiStatus: "blocked",
-          aiProgress: 0,
-          aiResponseShort: "OpenClaw execution failed",
-          aiBlockers: errorReasons.length > 0 ? errorReasons : ["All OpenClaw URLs failed"],
-        }).catch(() => {});
-      }
-      
-      // Also update in-memory store directly
-      if (taskId) {
-        try {
-          await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://ai-tasks-zeta.vercel.app'}/api/tasks`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              id: taskId, 
-              aiStatus: "blocked",
-              aiProgress: 0,
-            }),
-          });
-        } catch (e) {
-          console.log("Direct blocked update failed:", e);
-        }
-      }
-    }).catch(console.error);
+      });
+    }
 
     // Return immediately
     return NextResponse.json({
@@ -185,6 +126,9 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error("Execute error:", error);
+    await logOpenClaw("error", "execute.error", "Execute endpoint error", {
+      message: error?.message || String(error),
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

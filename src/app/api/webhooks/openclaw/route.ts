@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@convex/_generated/api";
+import { logOpenClaw } from "@/lib/openclawLogger";
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,6 +9,13 @@ export async function POST(request: NextRequest) {
     const { sessionId, status, message, progress, response, taskId, blockers, agent, prompt } = body;
 
     console.log("OpenClaw webhook:", { sessionId, status, taskId });
+    await logOpenClaw("info", "webhook.received", "Webhook received", {
+      sessionId: sessionId || null,
+      status: status || null,
+      taskId: taskId || null,
+      agent: agent || null,
+      progress: progress ?? null,
+    });
 
     if (!taskId) {
       return NextResponse.json({ error: "taskId required" }, { status: 400 });
@@ -101,9 +109,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    await logOpenClaw("info", "webhook.applied", "Webhook updates applied", {
+      sessionId: sessionId || null,
+      taskId: taskId || null,
+      status: normalizedStatus,
+      progress: normalizedProgress,
+    });
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Webhook error:", error);
+    await logOpenClaw("error", "webhook.error", "Webhook handler error", {
+      message: error?.message || String(error),
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
