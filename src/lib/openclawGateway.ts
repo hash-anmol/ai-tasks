@@ -77,7 +77,11 @@ export function filterSessionsByAgent(
   agentId?: string,
 ): GatewaySessionRow[] {
   if (!agentId) return sessions;
-  return sessions.filter((session) => getAgentIdFromSessionKey(session.key) === agentId);
+  return sessions.filter((session) => {
+    const sessionAgent = getAgentIdFromSessionKey(session.key);
+    if (agentId === "main") return sessionAgent === null || sessionAgent === "main";
+    return sessionAgent === agentId;
+  });
 }
 
 export function getSessionDisplayName(session: GatewaySessionRow): string {

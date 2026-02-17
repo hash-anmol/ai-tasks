@@ -24,15 +24,20 @@ interface Task {
   aiResponseShort?: string;
   aiBlockers?: string[];
   openclawTaskId?: string;
+  parentTaskId?: string;
+  isSubtask?: boolean;
+  subtaskMode?: string;
+  heartbeatAgentId?: string;
   createdAt: number;
   updatedAt: number;
 }
 
 const AGENTS = [
-  { id: "researcher", name: "Researcher", emoji: "🔍" },
-  { id: "writer", name: "Writer", emoji: "✍️" },
-  { id: "editor", name: "Editor", emoji: "📝" },
-  { id: "coordinator", name: "Coordinator", emoji: "🎯" },
+  { id: "main", name: "Vertex (General Agent)", emoji: "🧠" },
+  { id: "researcher", name: "Scout (Research Agent)", emoji: "🔍" },
+  { id: "writer", name: "Writer (Writing Agent)", emoji: "✍️" },
+  { id: "editor", name: "Editor (Editing Agent)", emoji: "📝" },
+  { id: "coordinator", name: "Nexus (Coordinator Agent)", emoji: "🎯" },
 ];
 
 const getAgentInfo = (agentId?: string) => AGENTS.find(a => a.id === agentId);
@@ -384,6 +389,9 @@ export default function KanbanBoard() {
                         {!areDependenciesMet(task, taskList) && (
                           <span className="material-symbols-outlined text-red-400 text-[14px]">lock</span>
                         )}
+                        {task.heartbeatAgentId && (
+                          <span className="material-icons text-cyan-500/60 text-[12px]" title={`Heartbeat: ${task.heartbeatAgentId}`}>schedule</span>
+                        )}
                         {task.agent && (
                           <span className="text-sm opacity-80" title={getAgentInfo(task.agent)?.name}>
                             {getAgentInfo(task.agent)?.emoji}
@@ -434,22 +442,47 @@ export default function KanbanBoard() {
                     )}
 
                     {/* Meta row */}
-                    <div className="flex items-center gap-3 mt-4 pt-3 border-t border-[var(--border)]/30">
-                      {task.priority && (
-                        <div className={`w-1.5 h-1.5 rounded-full ${getPriorityDot(task.priority)} shadow-sm`}
-                          title={task.priority} />
+                      <div className="flex items-center gap-3 mt-4 pt-3 border-t border-[var(--border)]/30">
+                        {task.priority && (
+                          <div className={`w-1.5 h-1.5 rounded-full ${getPriorityDot(task.priority)} shadow-sm`}
+                            title={task.priority} />
+                        )}
+                        {task.isAI && (
+                          <span className="text-[9px] font-bold tracking-wider text-[var(--text-secondary)] opacity-50 uppercase">
+                            AI Task
+                          </span>
+                        )}
+                        {task.subtaskMode && (
+                          <span className="text-[9px] font-bold tracking-wider text-indigo-500/60 uppercase">
+                            {task.subtaskMode}
+                          </span>
+                        )}
+                        {task.isSubtask && (
+                          <span className="text-[9px] font-bold tracking-wider text-violet-500/60 uppercase">
+                            Subtask
+                          </span>
+                        )}
+                        {task.dueDate && (
+                          <span className="text-[10px] text-[var(--text-secondary)] opacity-40 font-light ml-auto">
+                            {new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* AI Progress bar for parent tasks */}
+                      {task.isAI && task.aiProgress !== undefined && task.aiProgress > 0 && task.aiProgress < 100 && (
+                        <div className="mt-2">
+                          <div className="h-1 bg-[var(--border)]/30 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-blue-500/60 rounded-full transition-all duration-500"
+                              style={{ width: `${task.aiProgress}%` }}
+                            />
+                          </div>
+                          <span className="text-[9px] text-[var(--text-secondary)] opacity-40 mt-0.5 block">
+                            {task.aiProgress}% complete
+                          </span>
+                        </div>
                       )}
-                      {task.isAI && (
-                        <span className="text-[9px] font-bold tracking-wider text-[var(--text-secondary)] opacity-50 uppercase">
-                          AI Task
-                        </span>
-                      )}
-                      {task.dueDate && (
-                        <span className="text-[10px] text-[var(--text-secondary)] opacity-40 font-light ml-auto">
-                          {new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        </span>
-                      )}
-                    </div>
                   </div>
                   );
                 })}

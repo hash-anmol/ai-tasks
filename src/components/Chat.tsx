@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import VoiceMode from "./VoiceMode";
+import MarkdownResponse from "./MarkdownResponse";
+import FileAttachmentBlock, { parseFileAttachments } from "./FileAttachmentBlock";
 import {
   filterSessionsByAgent,
   getSessionDisplayName,
@@ -11,10 +13,11 @@ import {
 } from "@/lib/openclawGateway";
 
 const AGENTS = [
-  { id: "researcher", name: "Researcher", emoji: "🔍" },
-  { id: "writer", name: "Writer", emoji: "✍️" },
-  { id: "editor", name: "Editor", emoji: "📝" },
-  { id: "coordinator", name: "Coordinator", emoji: "🎯" },
+  { id: "main", name: "Vertex (General Agent)", emoji: "🧠" },
+  { id: "researcher", name: "Scout (Research Agent)", emoji: "🔍" },
+  { id: "writer", name: "Writer (Writing Agent)", emoji: "✍️" },
+  { id: "editor", name: "Editor (Editing Agent)", emoji: "📝" },
+  { id: "coordinator", name: "Nexus (Coordinator Agent)", emoji: "🎯" },
 ];
 
 interface ToolCallInfo {
@@ -37,34 +40,93 @@ interface ChatMessage {
   thinking?: ThinkingData;
 }
 
-// System prompt that teaches the AI how to create tasks
-const TASK_CREATION_SYSTEM_PROMPT = `You are an AI assistant integrated into a task management app. You can create tasks for the user.
+// System prompt that teaches the AI how to create tasks and delegate to agents
+const TASK_CREATION_SYSTEM_PROMPT = `You are an AI assistant integrated into a task management app. You can create tasks and delegate complex work to specialist agents.
 
-When the user asks you to create a task, add a todo, or anything that implies creating an actionable item, you MUST include a JSON block in your response using this exact format:
+## Creating Tasks
+
+When the user asks you to create a task, add a todo, or anything that implies creating an actionable item, include a JSON block:
 
 [CREATE_TASK]
 {"title": "Task title here", "description": "Optional description", "priority": "medium", "agent": "researcher", "tags": ["tag1"]}
 [/CREATE_TASK]
 
-Rules for task creation:
-- "title" is required (string)
-- "description" is optional (string)
-- "priority" can be "low", "medium", or "high" (defaults to "medium")
-- "agent" can be "researcher", "writer", "editor", or "coordinator" (optional - only set if the task is an AI task)
-- "tags" is an optional array of strings
-- You can create multiple tasks by including multiple [CREATE_TASK]...[/CREATE_TASK] blocks
-- Always confirm to the user what tasks you created
-- If the user's request is ambiguous, ask for clarification before creating tasks
+## Multi-Agent Delegation
 
-Important: You MUST wrap the JSON in [CREATE_TASK] and [/CREATE_TASK] markers. Do NOT just describe creating a task - actually include the markers so the system can create it.`;
+For complex tasks that need multiple steps, you can break them into subtasks and assign them to specialist agents. Each agent picks up tasks automatically via heartbeat polling.
 
-// Parse [CREATE_TASK]...[/CREATE_TASK] blocks from AI response
-function parseTaskBlocks(content: string): { title: string; description?: string; priority?: string; agent?: string; tags?: string[] }[] {
-  const tasks: { title: string; description?: string; priority?: string; agent?: string; tags?: string[] }[] = [];
-  const regex = /\[CREATE_TASK\]\s*([\s\S]*?)\s*\[\/CREATE_TASK\]/g;
+**Available agents:**
+- "researcher" — finds information, does web research, gathers data
+- "writer" — creates content, drafts documents, writes copy
+- "editor" — reviews, proofreads, refines content
+- "coordinator" — plans, breaks down tasks, orchestrates work
+
+**To create subtasks under a parent task:**
+
+First create the parent task, then create subtasks referencing it:
+
+[CREATE_TASK]
+{"title": "Write blog post about AI trends", "description": "Research, write, and edit a blog post", "agent": "coordinator", "tags": ["blog"], "subtaskMode": "serial"}
+[/CREATE_TASK]
+
+[CREATE_SUBTASK parent="Write blog post about AI trends"]
+{"title": "Research AI trends 2026", "description": "Find top 5 AI trends with sources", "agent": "researcher", "heartbeatAgentId": "researcher", "priority": "high", "tags": ["research"]}
+[/CREATE_SUBTASK]
+
+[CREATE_SUBTASK parent="Write blog post about AI trends" dependsOn="Research AI trends 2026"]
+{"title": "Draft blog post", "description": "Write 1000-word blog post based on research", "agent": "writer", "heartbeatAgentId": "writer", "priority": "high", "tags": ["writing"]}
+[/CREATE_SUBTASK]
+
+[CREATE_SUBTASK parent="Write blog post about AI trends" dependsOn="Draft blog post"]
+{"title": "Edit and polish blog post", "description": "Review for clarity, grammar, and flow", "agent": "editor", "heartbeatAgentId": "editor", "priority": "medium", "tags": ["editing"]}
+[/CREATE_SUBTASK]
+
+**Subtask rules:**
+- "heartbeatAgentId" (required for subtasks) — which agent picks this up via heartbeat
+- "subtaskMode" on parent: "serial" (subtasks depend on each other) or "parallel" (all run at once)
+- "dependsOn" — title of the task this depends on (resolved to ID by the system)
+- Agents automatically pick up tasks on their next heartbeat (every 15 min)
+- Dependencies are checked server-side — agents only see tasks whose deps are all completed
+
+## Field Reference
+
+- "title" — required string
+- "description" — optional string
+- "priority" — "low" | "medium" | "high" (defaults to "medium")
+- "agent" — "researcher" | "writer" | "editor" | "coordinator" (optional, makes it an AI task)
+- "tags" — optional array of strings
+- "heartbeatAgentId" — which agent picks this up (for delegated subtasks)
+- "subtaskMode" — "parallel" | "serial" (on parent task)
+
+You can create multiple tasks/subtasks by including multiple blocks.
+Always confirm to the user what was created.
+If the request is ambiguous, ask for clarification.
+
+Important: You MUST wrap JSON in [CREATE_TASK] or [CREATE_SUBTASK] markers. Do NOT just describe creating a task.`;
+
+interface ParsedTask {
+  title: string;
+  description?: string;
+  priority?: string;
+  agent?: string;
+  tags?: string[];
+  // Multi-agent fields
+  subtaskMode?: string;
+  heartbeatAgentId?: string;
+  // Subtask linkage (resolved later)
+  _parentTitle?: string;
+  _dependsOnTitles?: string[];
+  isSubtask?: boolean;
+}
+
+// Parse [CREATE_TASK] and [CREATE_SUBTASK] blocks from AI response
+function parseTaskBlocks(content: string): ParsedTask[] {
+  const tasks: ParsedTask[] = [];
+
+  // Parse standalone tasks
+  const taskRegex = /\[CREATE_TASK\]\s*([\s\S]*?)\s*\[\/CREATE_TASK\]/g;
   let match;
-
-  while ((match = regex.exec(content)) !== null) {
+  while ((match = taskRegex.exec(content)) !== null) {
     try {
       const parsed = JSON.parse(match[1].trim());
       if (parsed.title && typeof parsed.title === "string") {
@@ -74,6 +136,35 @@ function parseTaskBlocks(content: string): { title: string; description?: string
           priority: parsed.priority || "medium",
           agent: parsed.agent,
           tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+          subtaskMode: parsed.subtaskMode,
+        });
+      }
+    } catch {
+      // Skip malformed JSON
+    }
+  }
+
+  // Parse subtasks
+  const subtaskRegex = /\[CREATE_SUBTASK\s+parent="([^"]+)"(?:\s+dependsOn="([^"]*)")?\]\s*([\s\S]*?)\s*\[\/CREATE_SUBTASK\]/g;
+  while ((match = subtaskRegex.exec(content)) !== null) {
+    try {
+      const parentTitle = match[1];
+      const dependsOnStr = match[2] || "";
+      const parsed = JSON.parse(match[3].trim());
+      if (parsed.title && typeof parsed.title === "string") {
+        const dependsOnTitles = dependsOnStr
+          ? dependsOnStr.split(",").map((s: string) => s.trim()).filter(Boolean)
+          : [];
+        tasks.push({
+          title: parsed.title,
+          description: parsed.description,
+          priority: parsed.priority || "medium",
+          agent: parsed.agent,
+          tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+          heartbeatAgentId: parsed.heartbeatAgentId,
+          isSubtask: true,
+          _parentTitle: parentTitle,
+          _dependsOnTitles: dependsOnTitles,
         });
       }
     } catch {
@@ -84,83 +175,12 @@ function parseTaskBlocks(content: string): { title: string; description?: string
   return tasks;
 }
 
-// Strip [CREATE_TASK] blocks from displayed message
+// Strip [CREATE_TASK] and [CREATE_SUBTASK] blocks from displayed message
 function stripTaskBlocks(content: string): string {
-  return content.replace(/\[CREATE_TASK\]\s*[\s\S]*?\s*\[\/CREATE_TASK\]/g, "").trim();
-}
-
-// File attachment types we support
-interface FileAttachment {
-  url: string;
-  filename: string;
-  type: "pdf" | "image" | "document" | "other";
-}
-
-// Parse file URLs from content
-function parseFileAttachments(content: string): FileAttachment[] {
-  const attachments: FileAttachment[] = [];
-  const urlRegex = /(https?:\/\/[^\s<>"\]]+\.(pdf|png|jpg|jpeg|gif|webp|doc|docx|xls|xlsx|ppt|pptx|txt|zip|mp3|mp4|mov|avi))/gi;
-  const matches = content.match(urlRegex);
-  
-  if (matches) {
-    for (const url of matches) {
-      const ext = url.split(".").pop()?.toLowerCase() || "";
-      let type: FileAttachment["type"] = "other";
-      
-      if (["pdf"].includes(ext)) type = "pdf";
-      else if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) type = "image";
-      else if (["doc", "docx", "txt"].includes(ext)) type = "document";
-      else if (["xls", "xlsx", "ppt", "pptx"].includes(ext)) type = "document";
-      
-      const filename = url.split("/").pop()?.split("?")[0] || "file";
-      attachments.push({ url, filename, type });
-    }
-  }
-  
-  return attachments;
-}
-
-// Get icon for file type
-function getFileIcon(type: FileAttachment["type"]): string {
-  switch (type) {
-    case "pdf": return "picture_as_pdf";
-    case "image": return "image";
-    case "document": return "description";
-    default: return "attach_file";
-  }
-}
-
-// FileAttachmentBlock component
-function FileAttachmentBlock({ attachments }: { attachments: FileAttachment[] }) {
-  if (attachments.length === 0) return null;
-  
-  return (
-    <div className="mt-2 pt-2 border-t border-[var(--border)]/30 space-y-1.5">
-      <p className="text-[10px] text-[var(--text-secondary)] opacity-60 font-medium uppercase tracking-wide">
-        Attachments ({attachments.length})
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {attachments.map((file, i) => (
-          <a
-            key={i}
-            href={file.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-blue-500/50 hover:bg-blue-500/5 transition-all group"
-          >
-            <span className="material-icons text-[14px] text-blue-500">{getFileIcon(file.type)}</span>
-            <span className="text-[11px] text-[var(--text-primary)] font-light max-w-[120px] truncate">
-              {file.filename}
-            </span>
-            <span className="material-icons text-[12px] text-[var(--text-secondary)] opacity-0 group-hover:opacity-60 transition-opacity">
-              download
-            </span>
-          </a>
-        ))}
-      </div>
-
-    </div>
-  );
+  return content
+    .replace(/\[CREATE_TASK\]\s*[\s\S]*?\s*\[\/CREATE_TASK\]/g, "")
+    .replace(/\[CREATE_SUBTASK\s+[^\]]*\]\s*[\s\S]*?\s*\[\/CREATE_SUBTASK\]/g, "")
+    .trim();
 }
 
 // Format tool call arguments for display
@@ -263,7 +283,7 @@ export default function Chat() {
     thinkingText: "",
     toolCalls: [],
   });
-  const [selectedAgent, setSelectedAgent] = useState<string | undefined>(undefined);
+  const [selectedAgent, setSelectedAgent] = useState<string | undefined>("main");
   const [selectedSessionId, setSelectedSessionId] = useState<string>("new");
   const [sessions, setSessions] = useState<GatewaySessionRow[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -404,11 +424,15 @@ export default function Chat() {
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
   };
 
-  // Create tasks from parsed AI response and fire-and-forget to execute endpoint
-  const handleTaskCreation = async (taskDefs: { title: string; description?: string; priority?: string; agent?: string; tags?: string[] }[]) => {
+  // Create tasks from parsed AI response, resolving subtask references
+  const handleTaskCreation = async (taskDefs: ParsedTask[]) => {
     const created: { title: string; agent?: string }[] = [];
+    // Map title -> Convex ID for resolving parent/dependency references
+    const titleToId: Record<string, string> = {};
 
+    // First pass: create parent tasks (non-subtasks)
     for (const def of taskDefs) {
+      if (def.isSubtask) continue;
       try {
         const isAI = !!def.agent;
         const taskId = await createTask({
@@ -419,12 +443,19 @@ export default function Chat() {
           tags: def.tags || [],
           isAI,
           agent: def.agent,
+          subtaskMode: def.subtaskMode,
         });
+
+        if (taskId) {
+          titleToId[def.title] = String(taskId);
+        }
 
         created.push({ title: def.title, agent: def.agent });
 
         // Fire-and-forget: send AI tasks to OpenClaw for execution
-        if (isAI && taskId) {
+        // (Only for non-parent tasks — parents with subtasks wait for subtask completion)
+        const hasSubtasks = taskDefs.some((t) => t._parentTitle === def.title);
+        if (isAI && taskId && !hasSubtasks) {
           fetch("/api/openclaw/execute", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -438,6 +469,42 @@ export default function Chat() {
         }
       } catch (err) {
         console.error("Failed to create task:", def.title, err);
+      }
+    }
+
+    // Second pass: create subtasks with resolved references
+    for (const def of taskDefs) {
+      if (!def.isSubtask) continue;
+      try {
+        const parentId = def._parentTitle ? titleToId[def._parentTitle] : undefined;
+        // Resolve dependsOn titles to IDs
+        const dependsOnIds = (def._dependsOnTitles || [])
+          .map((t) => titleToId[t])
+          .filter(Boolean);
+
+        const isAI = !!def.agent;
+        const taskId = await createTask({
+          title: def.title,
+          description: def.description,
+          status: isAI ? "assigned" : "inbox",
+          priority: def.priority || "medium",
+          tags: def.tags || [],
+          isAI,
+          agent: def.agent,
+          parentTaskId: parentId,
+          isSubtask: true,
+          createdBy: "coordinator",
+          heartbeatAgentId: def.heartbeatAgentId,
+          dependsOn: dependsOnIds.length > 0 ? dependsOnIds : undefined,
+        });
+
+        if (taskId) {
+          titleToId[def.title] = String(taskId);
+        }
+
+        created.push({ title: def.title, agent: def.agent });
+      } catch (err) {
+        console.error("Failed to create subtask:", def.title, err);
       }
     }
 
@@ -664,6 +731,9 @@ export default function Chat() {
       setStreamingContent("");
       setStreamingThinking({ thinkingText: "", toolCalls: [] });
 
+      // Refresh sessions list to pick up any new sessions
+      loadSessions();
+
       // Process queued messages
       if (messageQueueRef.current.length > 0) {
         const nextMsg = messageQueueRef.current.shift()!;
@@ -797,7 +867,6 @@ export default function Chat() {
           onChange={(e) => handleAgentChange(e.target.value || undefined)}
           className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-blue-500 focus:outline-none text-[12px] font-medium text-[var(--text-primary)] truncate"
         >
-          <option value="">Default Agent</option>
           {AGENTS.map((a) => (
             <option key={a.id} value={a.id}>
               {a.emoji} {a.name}
@@ -805,29 +874,39 @@ export default function Chat() {
           ))}
         </select>
 
-        {/* Session selector - only when an agent is chosen */}
+        {/* Session selector - shows for all agents including General Agent */}
         {selectedAgent && (
-          <select
-            value={selectedSessionId}
-            onChange={(e) => setSelectedSessionId(e.target.value)}
-            className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-blue-500 focus:outline-none text-[12px] font-light text-[var(--text-primary)] truncate"
-          >
-            <option value="new">+ New Session</option>
-            {sessionsLoading && (
-              <option disabled value="loading">
-                Loading sessions...
-              </option>
-            )}
-            {agentSessions.map((session) => {
-              const timeAgo = session.updatedAt ? getTimeAgo(session.updatedAt) : "unknown";
-              const label = getSessionDisplayName(session);
-              return (
-                <option key={session.key} value={session.key}>
-                  {label} ({timeAgo})
+          <div className="flex items-center gap-1 flex-1 min-w-0">
+            <select
+              value={selectedSessionId}
+              onChange={(e) => setSelectedSessionId(e.target.value)}
+              className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] focus:border-blue-500 focus:outline-none text-[12px] font-light text-[var(--text-primary)] truncate"
+            >
+              <option value="new">+ New Session</option>
+              {sessionsLoading && (
+                <option disabled value="loading">
+                  Loading sessions...
                 </option>
-              );
-            })}
-          </select>
+              )}
+              {agentSessions.map((session) => {
+                const timeAgo = session.updatedAt ? getTimeAgo(session.updatedAt) : "unknown";
+                const label = getSessionDisplayName(session);
+                return (
+                  <option key={session.key} value={session.key}>
+                    {label} ({timeAgo})
+                  </option>
+                );
+              })}
+            </select>
+            <button
+              onClick={() => loadSessions()}
+              disabled={sessionsLoading}
+              className="w-9 h-9 flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50"
+              title="Refresh sessions"
+            >
+              <span className={`material-icons text-[16px] ${sessionsLoading ? 'animate-spin' : ''}`}>refresh</span>
+            </button>
+          </div>
         )}
 
       </div>
@@ -898,9 +977,13 @@ export default function Chat() {
                 <ThinkingBlock thinking={msg.thinking} />
               )}
 
-              <pre className="text-[13px] font-body whitespace-pre-wrap leading-relaxed font-light">
-                {msg.content}
-              </pre>
+              {msg.role === "user" ? (
+                <pre className="text-[13px] font-body whitespace-pre-wrap leading-relaxed font-light">
+                  {msg.content}
+                </pre>
+              ) : (
+                <MarkdownResponse content={msg.content} />
+              )}
 
               {/* Show created tasks indicator */}
               {msg.createdTasks && msg.createdTasks.length > 0 && (
@@ -943,10 +1026,10 @@ export default function Chat() {
               )}
 
               {streamingContent ? (
-                <pre className="text-[13px] font-body whitespace-pre-wrap leading-relaxed font-light">
-                  {streamingContent}
+                <div>
+                  <MarkdownResponse content={streamingContent} />
                   <span className="inline-block w-[2px] h-[14px] bg-[var(--text-secondary)] opacity-60 animate-pulse ml-0.5 align-text-bottom" />
-                </pre>
+                </div>
               ) : (
                 <div className="flex items-center gap-1.5">
                   <div className="flex gap-0.5">

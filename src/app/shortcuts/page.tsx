@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import BottomNav from "@/components/BottomNav";
-import AddTaskButton from "@/components/AddTaskButton";
+import AppFooter from "@/components/AppFooter";
 
 const shortcuts = [
   { key: "n", description: "New task", action: "Opens add task modal" },
@@ -47,8 +46,7 @@ export default function ShortcutsPage() {
         </p>
       </div>
 
-      <AddTaskButton />
-      <BottomNav />
+      <AppFooter />
     </div>
   );
 }

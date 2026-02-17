@@ -61,6 +61,52 @@ export const getSubtasks = query({
   },
 });
 
+// Get ready heartbeat tasks for a specific agent
+// Returns tasks where: heartbeatAgentId matches, aiStatus=pending, all dependsOn are completed
+export const getHeartbeatTasks = query({
+  args: { agent: v.string() },
+  handler: async (ctx, args) => {
+    // Get all pending tasks assigned to this agent via heartbeat
+    const candidates = await ctx.db
+      .query("tasks")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("heartbeatAgentId"), args.agent),
+          q.eq(q.field("aiStatus"), "pending")
+        )
+      )
+      .collect();
+
+    // Filter out tasks whose dependencies aren't all completed
+    const readyTasks = [];
+    for (const task of candidates) {
+      if (!task.dependsOn || task.dependsOn.length === 0) {
+        readyTasks.push(task);
+        continue;
+      }
+      // Check all dependencies are completed
+      let allDepsComplete = true;
+      for (const depId of task.dependsOn) {
+        try {
+          const depTask = await ctx.db.get(depId as any) as any;
+          if (!depTask || depTask.aiStatus !== "completed") {
+            allDepsComplete = false;
+            break;
+          }
+        } catch {
+          // If dep can't be found, treat as unmet
+          allDepsComplete = false;
+          break;
+        }
+      }
+      if (allDepsComplete) {
+        readyTasks.push(task);
+      }
+    }
+    return readyTasks;
+  },
+});
+
 // Create task
 export const createTask = mutation({
   args: {
@@ -77,6 +123,8 @@ export const createTask = mutation({
     parentTaskId: v.optional(v.string()),
     isSubtask: v.optional(v.boolean()),
     createdBy: v.optional(v.string()),
+    subtaskMode: v.optional(v.string()),
+    heartbeatAgentId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const taskId = await ctx.db.insert("tasks", {
@@ -127,6 +175,8 @@ export const updateTask = mutation({
     parentTaskId: v.optional(v.string()),
     isSubtask: v.optional(v.boolean()),
     createdBy: v.optional(v.string()),
+    subtaskMode: v.optional(v.string()),
+    heartbeatAgentId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;

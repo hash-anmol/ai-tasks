@@ -26,6 +26,9 @@ export default defineSchema({
     parentTaskId: v.optional(v.string()), // ID of parent task (if this is a subtask)
     isSubtask: v.optional(v.boolean()), // true if created as a subtask
     createdBy: v.optional(v.string()), // "user" | "coordinator" | "researcher" | "writer" | "editor" — who created this task
+    // Multi-agent delegation fields
+    subtaskMode: v.optional(v.string()), // "parallel" | "serial" — how subtasks execute
+    heartbeatAgentId: v.optional(v.string()), // which agent picks this up via heartbeat ("researcher" | "writer" | "editor" | "coordinator")
     createdAt: v.number(),
     updatedAt: v.number(),
   }),

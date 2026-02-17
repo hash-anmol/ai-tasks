@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useNotifications } from "@/hooks/useNotifications";
-import BottomNav from "@/components/BottomNav";
-import AddTaskButton from "@/components/AddTaskButton";
+import AppFooter from "@/components/AppFooter";
 
 const AGENTS = [
-  { id: "researcher", name: "Researcher", emoji: "🔍", color: "bg-blue-500" },
-  { id: "writer", name: "Writer", emoji: "✍️", color: "bg-purple-500" },
-  { id: "editor", name: "Editor", emoji: "📝", color: "bg-orange-500" },
-  { id: "coordinator", name: "Coordinator", emoji: "🎯", color: "bg-green-500" },
+  { id: "main", name: "Vertex (General Agent)", emoji: "🧠", color: "bg-slate-500" },
+  { id: "researcher", name: "Scout (Research Agent)", emoji: "🔍", color: "bg-blue-500" },
+  { id: "writer", name: "Writer (Writing Agent)", emoji: "✍️", color: "bg-purple-500" },
+  { id: "editor", name: "Editor (Editing Agent)", emoji: "📝", color: "bg-orange-500" },
+  { id: "coordinator", name: "Nexus (Coordinator Agent)", emoji: "🎯", color: "bg-green-500" },
 ];
 
 const getAgentInfo = (agentId: string) => AGENTS.find(a => a.id === agentId);
@@ -114,8 +114,7 @@ export default function NotificationsPage() {
         )}
       </div>
 
-      <AddTaskButton />
-      <BottomNav />
+      <AppFooter />
     </div>
   );
 }

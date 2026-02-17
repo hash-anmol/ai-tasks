@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import {
+  filterSessionsByAgent,
+  getSessionDisplayName,
+  type GatewaySessionRow,
+} from "@/lib/openclawGateway";
 
 interface Task {
   _id: string;
@@ -21,22 +26,12 @@ interface Task {
   updatedAt: number;
 }
 
-interface Session {
-  _id: string;
-  sessionId: string;
-  name: string;
-  agent: string;
-  status: string;
-  taskCount: number;
-  lastTaskTitle?: string;
-  updatedAt: number;
-}
-
 const AGENTS = [
-  { id: "researcher", name: "Researcher", emoji: "🔍", color: "bg-blue-500" },
-  { id: "writer", name: "Writer", emoji: "✍️", color: "bg-purple-500" },
-  { id: "editor", name: "Editor", emoji: "📝", color: "bg-orange-500" },
-  { id: "coordinator", name: "Coordinator", emoji: "🎯", color: "bg-green-500" },
+  { id: "main", name: "Vertex (General Agent)", emoji: "🧠", color: "bg-slate-500" },
+  { id: "researcher", name: "Scout (Research Agent)", emoji: "🔍", color: "bg-blue-500" },
+  { id: "writer", name: "Writer (Writing Agent)", emoji: "✍️", color: "bg-purple-500" },
+  { id: "editor", name: "Editor (Editing Agent)", emoji: "📝", color: "bg-orange-500" },
+  { id: "coordinator", name: "Nexus (Coordinator Agent)", emoji: "🎯", color: "bg-green-500" },
 ];
 
 export default function AddTaskButton() {
@@ -50,16 +45,42 @@ export default function AddTaskButton() {
   const [selectedSessionId, setSelectedSessionId] = useState<string>("new");
   const [dependsOn, setDependsOn] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // OpenClaw sessions
+  const [sessions, setSessions] = useState<GatewaySessionRow[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  
   const existingTasks = (useQuery(api.tasks.getTasks) || []) as Task[];
-  const allSessions = (useQuery(api.sessions.getSessions) || []) as Session[];
   const createTask = useMutation(api.tasks.createTask);
 
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const res = await fetch("/api/openclaw/sessions");
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(Array.isArray(data.sessions) ? data.sessions : []);
+      }
+    } catch (err) {
+      console.error("Failed to load sessions:", err);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  // Load sessions when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      loadSessions();
+    }
+  }, [isOpen, loadSessions]);
+
   // Filter sessions for the selected agent, sorted by most recent
-  const agentSessions = agent
-    ? allSessions
-        .filter((s) => s.agent === agent)
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-    : [];
+  const agentSessions = filterSessionsByAgent(sessions, agent).sort((a, b) => {
+    const aTime = a.updatedAt ?? 0;
+    const bTime = b.updatedAt ?? 0;
+    return bTime - aTime;
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -278,13 +299,15 @@ export default function AddTaskButton() {
                       className="w-full px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)]/50 focus:border-blue-500 focus:outline-none text-sm font-light text-[var(--text-primary)]"
                     >
                       <option value="new">+ New Session</option>
+                      {sessionsLoading && (
+                        <option disabled>Loading sessions...</option>
+                      )}
                       {agentSessions.map((session) => {
-                        const timeAgo = getTimeAgo(session.updatedAt);
-                        const statusIcon = session.status === "active" ? "●" : session.status === "completed" ? "✓" : "✕";
-                        const statusColor = session.status === "active" ? "text-green-500" : "";
+                        const timeAgo = session.updatedAt ? getTimeAgo(session.updatedAt) : "unknown";
+                        const label = getSessionDisplayName(session);
                         return (
-                          <option key={session.sessionId} value={session.sessionId}>
-                            {statusIcon} {session.name} ({session.taskCount} task{session.taskCount !== 1 ? "s" : ""}, {timeAgo})
+                          <option key={session.key} value={session.key}>
+                            {label} ({timeAgo})
                           </option>
                         );
                       })}

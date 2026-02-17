@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import BottomNav from "@/components/BottomNav";
-import AddTaskButton from "@/components/AddTaskButton";
+import { useState, useEffect } from "react";
+import AppFooter from "@/components/AppFooter";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 
@@ -37,22 +36,35 @@ interface Task {
   status?: string;
 }
 
-interface Session {
-  _id: string;
-  sessionId: string;
-  name: string;
-  agent: string;
-  status: string;
-  taskCount: number;
-  lastTaskId?: string;
-  lastTaskTitle?: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
 // Simple session list component
-function SessionList() {
-  const sessions = (useQuery(api.sessions.getSessions) || []) as Session[];
+function SessionList({ tasks }: { tasks: Task[] }) {
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadSessions = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/openclaw/sessions");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to load sessions");
+      }
+      const data = await res.json();
+      setSessions(Array.isArray(data.sessions) ? data.sessions : []);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load sessions";
+      setError(msg);
+      setSessions([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSessions();
+  }, []);
   
   const formatTime = (ts: number) => {
     const d = new Date(ts);
@@ -65,6 +77,22 @@ function SessionList() {
     if (hours < 24) return `${hours}h ago`;
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-8 opacity-50">
+        <p className="text-[var(--text-secondary)] text-sm">Loading sessions...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8 opacity-50">
+        <p className="text-[var(--text-secondary)] text-sm">{error}</p>
+      </div>
+    );
+  }
 
   if (sessions.length === 0) {
     return (
@@ -79,32 +107,30 @@ function SessionList() {
   return (
     <div className="space-y-2">
       {sessions
-        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
         .slice(0, 10)
         .map((session) => (
           <div
-            key={session._id}
+            key={session.key}
             className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 flex items-center justify-between"
           >
             <div className="flex items-center gap-3 min-w-0">
               <span className="text-lg flex-shrink-0">
-                {AGENTS_CONFIG.find(a => a.id === session.agent)?.emoji || "🤖"}
+                {AGENTS_CONFIG.find(a => a.id === String(session.key).split(":")[1])?.emoji || "🤖"}
               </span>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-[var(--text-primary)] truncate">
-                  {session.name}
+                  {session.displayName || session.label || session.key}
                 </p>
                 <p className="text-[11px] text-[var(--text-secondary)]">
-                  {session.taskCount} task{session.taskCount !== 1 ? "s" : ""} • {formatTime(session.updatedAt)}
+                  {formatTime(session.updatedAt || Date.now())}
                 </p>
               </div>
             </div>
             <span className={`text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 ${
-              session.status === "active" ? "bg-blue-500/20 text-blue-500" :
-              session.status === "completed" ? "bg-green-500/20 text-green-500" :
-              "bg-red-500/20 text-red-500"
+              "bg-blue-500/10 text-blue-500"
             }`}>
-              {session.status}
+              {session.kind || "session"}
             </span>
           </div>
         ))}
@@ -113,23 +139,26 @@ function SessionList() {
 }
 
 const AGENTS_CONFIG = [
-  { id: "researcher", name: "Researcher", emoji: "🔍" },
-  { id: "writer", name: "Writer", emoji: "✍️" },
-  { id: "editor", name: "Editor", emoji: "📝" },
-  { id: "coordinator", name: "Coordinator", emoji: "🎯" },
+  { id: "main", name: "Vertex (General Agent)", emoji: "🧠" },
+  { id: "researcher", name: "Scout (Research Agent)", emoji: "🔍" },
+  { id: "writer", name: "Writer (Writing Agent)", emoji: "✍️" },
+  { id: "editor", name: "Editor (Editing Agent)", emoji: "📝" },
+  { id: "coordinator", name: "Nexus (Coordinator Agent)", emoji: "🎯" },
 ];
 
 export default function AgentsPage() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const tasks = (useQuery(api.tasks.getTasks) || []) as Task[];
   const runs = (useQuery(api.agentRuns.getAgentRuns) || []) as AgentRun[];
+  const taskIdSet = new Set(tasks.map((t) => t._id));
+  const linkedRuns = runs.filter((run) => run.taskId && taskIdSet.has(run.taskId));
 
   const getAgentStats = (): AgentStats[] => {
     return AGENTS_CONFIG.map((agent) => {
-      const agentRuns = runs.filter(r => r.agent === agent.id);
+      const agentRuns = linkedRuns.filter(r => r.agent === agent.id);
       return {
         ...agent,
-        status: getAgentStatus(agent.id, runs),
+        status: getAgentStatus(agent.id, linkedRuns),
         currentTask: getAgentCurrentTask(agent.id, tasks),
         tasksCompleted: agentRuns.filter(r => r.status === "completed").length,
         totalRuns: agentRuns.length,
@@ -170,7 +199,7 @@ export default function AgentsPage() {
   };
 
   const getAgentRuns = (agentId: string) =>
-    runs.filter((run: AgentRun) => run.agent === agentId)
+    linkedRuns.filter((run: AgentRun) => run.agent === agentId)
       .sort((a, b) => b.startedAt - a.startedAt);
 
   const findTaskTitle = (taskId?: string) =>
@@ -348,12 +377,11 @@ export default function AgentsPage() {
         {/* Sessions Section */}
         <div className="mt-8">
           <h2 className="font-display text-lg text-[var(--text-primary)] mb-4">Recent Sessions</h2>
-          <SessionList />
+          <SessionList tasks={tasks} />
         </div>
       </main>
 
-      <AddTaskButton />
-      <BottomNav />
+      <AppFooter />
 
       {/* Ambient background gradients */}
       <div className="fixed top-0 left-0 w-full h-full pointer-events-none -z-10 overflow-hidden">

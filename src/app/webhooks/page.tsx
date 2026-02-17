@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import BottomNav from "@/components/BottomNav";
-import AddTaskButton from "@/components/AddTaskButton";
+import AppFooter from "@/components/AppFooter";
 
 export default function WebhooksPage() {
   const [webhooks, setWebhooks] = useState<any[]>([]);
@@ -114,8 +113,7 @@ export default function WebhooksPage() {
         </div>
       )}
 
-      <AddTaskButton />
-      <BottomNav />
+      <AppFooter />
     </div>
   );
 }

@@ -1,8 +1,7 @@
 "use client";
 
 import { useGamification, ACHIEVEMENTS } from "@/hooks/useGamification";
-import BottomNav from "@/components/BottomNav";
-import AddTaskButton from "@/components/AddTaskButton";
+import AppFooter from "@/components/AppFooter";
 
 export default function AchievementsPage() {
   const { stats, loaded } = useGamification();
@@ -41,8 +40,7 @@ export default function AchievementsPage() {
           </div>
         ))}
       </div>
-      <AddTaskButton />
-      <BottomNav />
+      <AppFooter />
     </div>
   );
 }

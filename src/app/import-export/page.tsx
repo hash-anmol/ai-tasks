@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import BottomNav from "@/components/BottomNav";
-import AddTaskButton from "@/components/AddTaskButton";
+import AppFooter from "@/components/AppFooter";
 
 export default function ImportExportPage() {
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
@@ -139,8 +138,7 @@ export default function ImportExportPage() {
         </p>
       </div>
 
-      <AddTaskButton />
-      <BottomNav />
+      <AppFooter />
     </div>
   );
 }

@@ -6,8 +6,7 @@ import TaskList from "@/components/TaskList";
 import KanbanBoard from "@/components/KanbanBoard";
 import Chat from "@/components/Chat";
 
-import AddTaskButton from "@/components/AddTaskButton";
-import Menu from "@/components/Menu";
+import AppFooter from "@/components/AppFooter";
 import VoiceMode from "@/components/VoiceMode";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -182,13 +181,7 @@ function PageContent() {
       </main>
 
       {!voiceModeOpen && (
-        <>
-          {/* Add task button */}
-          <AddTaskButton />
-
-          {/* Hamburger Menu */}
-          <Menu onChatClick={handleChatClick} onVoiceClick={handleVoiceClick} />
-        </>
+        <AppFooter onChatClick={handleChatClick} onVoiceClick={handleVoiceClick} />
       )}
 
       {/* Voice Mode Overlay */}

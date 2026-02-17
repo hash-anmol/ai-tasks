@@ -29,6 +29,8 @@ interface Task {
   parentTaskId?: string;
   isSubtask?: boolean;
   createdBy?: string;
+  subtaskMode?: string;
+  heartbeatAgentId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -47,10 +49,11 @@ function formatDuration(ms: number): string {
 }
 
 const AGENTS: Record<string, { name: string; emoji: string; color: string }> = {
-  researcher: { name: "Scout", emoji: "🔍", color: "text-blue-500/80" },
-  writer: { name: "Writer", emoji: "✍️", color: "text-purple-500/80" },
-  editor: { name: "Editor", emoji: "📝", color: "text-orange-500/80" },
-  coordinator: { name: "Nexus AI", emoji: "⚡", color: "text-teal-500/80" },
+  main: { name: "Vertex (General Agent)", emoji: "🧠", color: "text-slate-500/80" },
+  researcher: { name: "Scout (Research Agent)", emoji: "🔍", color: "text-blue-500/80" },
+  writer: { name: "Writer (Writing Agent)", emoji: "✍️", color: "text-purple-500/80" },
+  editor: { name: "Editor (Editing Agent)", emoji: "📝", color: "text-orange-500/80" },
+  coordinator: { name: "Nexus (Coordinator Agent)", emoji: "🎯", color: "text-teal-500/80" },
 };
 
 const getAgentInfo = (agentId?: string) => agentId ? AGENTS[agentId] : undefined;
@@ -332,6 +335,22 @@ function TaskWithSubtasks({ task, subtasks, onToggle, onDelete, allTasks, isBloc
         onToggleSubtasks={hasSubtasks ? () => setShowSubtasks(!showSubtasks) : undefined}
         subtasksExpanded={showSubtasks}
       />
+      {/* Subtask progress bar */}
+      {hasSubtasks && subtasks.length > 0 && (
+        <div className="ml-[30px] mt-1 mb-1">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1 bg-[var(--border)]/30 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-500/60 rounded-full transition-all duration-500"
+                style={{ width: `${Math.round((doneCount / subtasks.length) * 100)}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-[var(--text-secondary)] opacity-50 font-light">
+              {Math.round((doneCount / subtasks.length) * 100)}%
+            </span>
+          </div>
+        </div>
+      )}
       {/* Subtask list - indented */}
       {hasSubtasks && showSubtasks && (
         <div className="ml-8 border-l border-[var(--border)]/20 pl-3">
@@ -470,6 +489,21 @@ function TaskCard({ task, onToggle, onDelete, isBlocked = false, blockedLabel = 
           {task.createdBy && task.createdBy !== "user" && (
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20">
               AI Created
+            </span>
+          )}
+
+          {/* Heartbeat agent assignment - shown on delegated subtasks */}
+          {task.heartbeatAgentId && (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20 flex items-center gap-0.5">
+              <span className="material-icons text-[10px]">schedule</span>
+              {getAgentInfo(task.heartbeatAgentId)?.emoji} Heartbeat
+            </span>
+          )}
+
+          {/* Subtask mode indicator - shown on parent tasks with subtasks */}
+          {task.subtaskMode && (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+              {task.subtaskMode === "parallel" ? "Parallel" : "Serial"}
             </span>
           )}
 

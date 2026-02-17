@@ -18,7 +18,6 @@ export async function GET() {
         {
           includeGlobal: true,
           includeUnknown: true,
-          activeMinutes: 1,
           limit: 200,
         },
         { token: OPENCLAW_TOKEN, password: OPENCLAW_PASSWORD },

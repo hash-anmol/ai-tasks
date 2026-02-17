@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import BottomNav from "@/components/BottomNav";
-import AddTaskButton from "@/components/AddTaskButton";
+import AppFooter from "@/components/AppFooter";
 
 interface Activity {
   id: string;
@@ -105,8 +104,7 @@ export default function ActivityPage() {
         </div>
       )}
 
-      <AddTaskButton />
-      <BottomNav />
+      <AppFooter />
     </div>
   );
 }

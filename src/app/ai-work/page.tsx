@@ -3,84 +3,12 @@
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import BottomNav from "@/components/BottomNav";
-import AddTaskButton from "@/components/AddTaskButton";
+import AppFooter from "@/components/AppFooter";
+import MarkdownResponse from "@/components/MarkdownResponse";
+import FileAttachmentBlockShared, { parseFileAttachments } from "@/components/FileAttachmentBlock";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-
-// File attachment types we support
-interface FileAttachment {
-  url: string;
-  filename: string;
-  type: "pdf" | "image" | "document" | "other";
-}
-
-// Parse file URLs from content
-function parseFileAttachments(content: string): FileAttachment[] {
-  const attachments: FileAttachment[] = [];
-  const urlRegex = /(https?:\/\/[^\s<>"\]]+\.(pdf|png|jpg|jpeg|gif|webp|doc|docx|xls|xlsx|ppt|pptx|txt|zip|mp3|mp4|mov|avi))/gi;
-  const matches = content?.match(urlRegex);
-  
-  if (matches) {
-    for (const url of matches) {
-      const ext = url.split(".").pop()?.toLowerCase() || "";
-      let type: FileAttachment["type"] = "other";
-      
-      if (["pdf"].includes(ext)) type = "pdf";
-      else if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) type = "image";
-      else if (["doc", "docx", "txt"].includes(ext)) type = "document";
-      else if (["xls", "xlsx", "ppt", "pptx"].includes(ext)) type = "document";
-      
-      const filename = url.split("/").pop()?.split("?")[0] || "file";
-      attachments.push({ url, filename, type });
-    }
-  }
-  
-  return attachments;
-}
-
-// Get icon for file type
-function getFileIcon(type: FileAttachment["type"]): string {
-  switch (type) {
-    case "pdf": return "picture_as_pdf";
-    case "image": return "image";
-    case "document": return "description";
-    default: return "attach_file";
-  }
-}
-
-// FileAttachmentBlock component
-function FileAttachmentBlock({ attachments }: { attachments: FileAttachment[] }) {
-  if (attachments.length === 0) return null;
-  
-  return (
-    <div className="mt-4 pt-4 border-t border-[var(--border)]">
-      <p className="text-[11px] text-[var(--text-secondary)] uppercase tracking-wider mb-3 opacity-70">
-        Attachments ({attachments.length})
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {attachments.map((file, i) => (
-          <a
-            key={i}
-            href={file.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[var(--surface)] border border-[var(--border)] hover:border-blue-500/50 hover:bg-blue-500/5 transition-all group"
-          >
-            <span className="material-icons text-[18px] text-blue-500">{getFileIcon(file.type)}</span>
-            <span className="text-[12px] text-[var(--text-primary)] font-light max-w-[200px] truncate">
-              {file.filename}
-            </span>
-            <span className="material-icons text-[14px] text-[var(--text-secondary)] opacity-0 group-hover:opacity-60 transition-opacity">
-              download
-            </span>
-          </a>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 interface Task {
   _id: string;
@@ -113,10 +41,11 @@ interface AgentRun {
 }
 
 const AGENTS: Record<string, { name: string; emoji: string; color: string }> = {
-  researcher: { name: "Researcher", emoji: "🔍", color: "text-blue-500" },
-  writer: { name: "Writer", emoji: "✍️", color: "text-purple-500" },
-  editor: { name: "Editor", emoji: "📝", color: "text-orange-500" },
-  coordinator: { name: "Coordinator", emoji: "⚡", color: "text-teal-500" },
+  main: { name: "Vertex (General Agent)", emoji: "🧠", color: "text-slate-500" },
+  researcher: { name: "Scout (Research Agent)", emoji: "🔍", color: "text-blue-500" },
+  writer: { name: "Writer (Writing Agent)", emoji: "✍️", color: "text-purple-500" },
+  editor: { name: "Editor (Editing Agent)", emoji: "📝", color: "text-orange-500" },
+  coordinator: { name: "Nexus (Coordinator Agent)", emoji: "🎯", color: "text-teal-500" },
 };
 
 const getAgentInfo = (agentId?: string) => agentId ? AGENTS[agentId] : undefined;
@@ -150,7 +79,10 @@ function AIWorkContent() {
   const [retryingTasks, setRetryingTasks] = useState<Set<string>>(new Set());
   
   const tasks = (tasksQuery || []) as Task[];
-  const runs = (runsQuery || []) as AgentRun[];
+  const allRuns = (runsQuery || []) as AgentRun[];
+  // Filter runs to only those with matching task IDs (avoid orphaned runs)
+  const taskIdSet = new Set(tasks.map(t => t._id));
+  const runs = allRuns.filter(run => run.taskId && taskIdSet.has(run.taskId));
   
   const aiTasks = tasks.filter(t => t.isAI);
   const focusedTask = focusedTaskId ? tasks.find(t => t._id === focusedTaskId) : null;
@@ -317,12 +249,10 @@ function AIWorkContent() {
           {focusedTask.aiResponse && (
             <div className="mb-8">
               <h2 className="text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wider mb-3 opacity-70">AI Response</h2>
-              <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 shadow-sm">
-                <pre className="text-[13px] text-[var(--text-primary)] whitespace-pre-wrap font-light leading-relaxed font-body">
-                  {focusedTask.aiResponse}
-                </pre>
+               <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 shadow-sm">
+                <MarkdownResponse content={focusedTask.aiResponse} />
                 {/* File attachments from AI response */}
-                <FileAttachmentBlock attachments={parseFileAttachments(focusedTask.aiResponse || "")} />
+                <FileAttachmentBlockShared attachments={parseFileAttachments(focusedTask.aiResponse || "")} />
               </div>
             </div>
           )}
@@ -363,9 +293,10 @@ function AIWorkContent() {
                         </span>
                       </div>
                       {run.response && (
-                        <pre className="text-[12px] text-[var(--text-primary)] whitespace-pre-wrap font-light leading-relaxed mt-2 font-body opacity-90">
-                          {run.response}
-                        </pre>
+                        <div className="mt-2 opacity-90">
+                          <MarkdownResponse content={run.response} compact />
+                          <FileAttachmentBlockShared attachments={parseFileAttachments(run.response)} />
+                        </div>
                       )}
                     </div>
                   );
@@ -384,8 +315,7 @@ function AIWorkContent() {
           )}
         </main>
 
-        <AddTaskButton />
-        <BottomNav />
+        <AppFooter />
       </div>
     );
   }
@@ -550,9 +480,8 @@ function AIWorkContent() {
                       <div className="p-4 pt-0 border-t border-[var(--border)] bg-[var(--background)]/30">
                         {run.response ? (
                           <div className="mt-4 bg-[var(--surface)]/50 border border-[var(--border)] rounded-xl p-4">
-                            <pre className="text-[12px] text-[var(--text-primary)] whitespace-pre-wrap font-light leading-relaxed font-body">
-                              {run.response}
-                            </pre>
+                            <MarkdownResponse content={run.response} />
+                            <FileAttachmentBlockShared attachments={parseFileAttachments(run.response)} />
                           </div>
                         ) : (
                           <p className="text-[12px] text-[var(--text-secondary)] font-light italic mt-4 opacity-50">No response recorded</p>
@@ -629,8 +558,7 @@ function AIWorkContent() {
         )}
       </main>
 
-      <AddTaskButton />
-      <BottomNav />
+      <AppFooter />
 
       {/* Ambient gradients */}
       <div className="fixed top-0 left-0 w-full h-full pointer-events-none -z-10 overflow-hidden">
