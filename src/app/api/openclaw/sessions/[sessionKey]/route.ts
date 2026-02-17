@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOpenClawUrls } from "@/lib/openclaw";
+import { getOpenClawUrls, getOpenClawAuth } from "@/lib/openclaw";
 import { requestGatewayChatHistory } from "@/lib/openclawGatewayServer";
-
-const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
-const OPENCLAW_PASSWORD = process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD;
 
 export async function GET(
   request: NextRequest,
@@ -22,15 +19,21 @@ export async function GET(
   const urls = getOpenClawUrls();
   let lastError: Error | null = null;
 
-  for (const baseUrl of urls) {
+  for (const url of urls) {
+    const { baseUrl, token, password } = getOpenClawAuth(url);
     try {
       const result = await requestGatewayChatHistory(
         baseUrl,
         { sessionKey, limit: safeLimit },
-        { token: OPENCLAW_TOKEN, password: OPENCLAW_PASSWORD },
+        { 
+          token, 
+          password,
+          timeoutMs: 30000
+        },
       );
       return NextResponse.json(result);
     } catch (error) {
+      console.error(`Chat history error from ${baseUrl}:`, error);
       lastError = error as Error;
     }
   }

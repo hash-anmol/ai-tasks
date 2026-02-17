@@ -1,45 +1,16 @@
 import { NextRequest } from "next/server";
-import { getOpenClawUrls } from "@/lib/openclaw";
+import { getOpenClawUrls, getOpenClawAuth } from "@/lib/openclaw";
 
-const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
-const OPENCLAW_PASSWORD = process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD;
 const TTS_VOICE = "af_bella";
-
-/**
- * POST /api/voice/chat
- * 
- * Streaming voice chat endpoint. Sends Server-Sent Events so the frontend
- * can show real-time phase updates as each step completes.
- * 
- * Architecture:
- * - Transcription: Calls local server via Tailscale (runs Faster Whisper)
- * - AI Response: Calls OpenClaw via Tailscale
- * - TTS: Calls local server via Tailscale (runs Kokoro)
- * 
- * Body: { audio: string (base64 data URL), conversationHistory?: {role,content}[] }
- * 
- * SSE events sent:
- *   phase:saving_audio     - Audio received
- *   phase:transcribing     - Running Faster Whisper STT
- *   phase:transcribed      - Transcription complete (includes text)
- *   phase:sending_to_agent - Sending text to OpenClaw AI
- *   phase:agent_responded  - AI response received (includes text)
- *   phase:generating_speech - Converting response to speech via Kokoro TTS
- *   phase:speech_ready     - TTS audio ready (includes base64 audio)
- *   phase:complete         - All done
- *   phase:error            - Something failed (includes error message)
- */
 
 function getLocalVoiceUrl(): string {
   // Use Tailscale funnel URL for local voice API
   const baseUrl = process.env.NEXT_PUBLIC_OPENCLAW_URL || "https://homeserver.tail07d4a6.ts.net";
-  // Voice API runs on port 18790
+  // Voice API runs on port 18791
   return baseUrl.replace(":18789", ":18791");
 }
 
 export async function POST(request: NextRequest) {
-  const ts = Date.now();
-
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -113,20 +84,19 @@ export async function POST(request: NextRequest) {
         const urls = getOpenClawUrls();
         let aiResponse = "";
         
-        for (const baseUrl of urls) {
+        for (const url of urls) {
+          const { baseUrl, header } = getOpenClawAuth(url);
           try {
             const messages = [
               ...(conversationHistory || []).slice(-10),
               { role: "user", content: transcription }
             ];
 
-            const openClawToken = OPENCLAW_TOKEN || OPENCLAW_PASSWORD;
-
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                ...(openClawToken ? { Authorization: `Bearer ${openClawToken}` } : {}),
+                ...(header && { Authorization: header }),
               },
               body: JSON.stringify({
                 model: "openclaw",

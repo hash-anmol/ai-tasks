@@ -17,6 +17,34 @@ interface OpenClawResponse {
   error?: string;
 }
 
+/**
+ * Extracts auth info from a URL if present (e.g. ?token=abc or ?password=123)
+ */
+export function getAuthFromUrl(urlStr: string) {
+  let workingUrl = urlStr.trim();
+  if (!workingUrl.startsWith("http://") && !workingUrl.startsWith("https://")) {
+    workingUrl = "https://" + workingUrl;
+  }
+
+  try {
+    const url = new URL(workingUrl);
+    const token = url.searchParams.get("token");
+    const password = url.searchParams.get("password");
+    
+    // Create clean base URL without query params or trailing slash
+    url.search = "";
+    let cleanUrl = url.toString().replace(/\/$/, "");
+    
+    return { 
+      token: token || undefined, 
+      password: password || undefined,
+      cleanUrl
+    };
+  } catch {
+    return { cleanUrl: urlStr.split("?")[0].replace(/\/$/, "") };
+  }
+}
+
 export function normalizeOpenClawUrls(input?: string | string[]) {
   const urls = Array.isArray(input) ? input : input ? [input] : [];
   const seen = new Set<string>();
@@ -46,6 +74,25 @@ export function getOpenClawUrls() {
 }
 
 /**
+ * Helper to get the best auth for a specific URL
+ */
+export function getOpenClawAuth(baseUrl: string) {
+  const urlAuth = getAuthFromUrl(baseUrl);
+  const token = urlAuth.token || OPENCLAW_TOKEN;
+  const password = urlAuth.password || OPENCLAW_PASSWORD;
+  
+  const finalToken = token?.trim();
+  const finalPassword = password?.trim();
+  
+  return {
+    token: finalToken,
+    password: finalPassword,
+    baseUrl: urlAuth.cleanUrl,
+    header: (finalToken || finalPassword) ? `Bearer ${finalToken || finalPassword}` : undefined
+  };
+}
+
+/**
  * Create a new OpenClaw session and send a task
  */
 export async function executeTaskWithOpenClaw(
@@ -55,13 +102,14 @@ export async function executeTaskWithOpenClaw(
 ): Promise<OpenClawSession> {
   let lastError: Error | null = null;
   const urls = getOpenClawUrls();
-  for (const baseUrl of urls) {
+  for (const url of urls) {
+    const { baseUrl, header } = getOpenClawAuth(url);
     try {
       const response = await fetch(`${baseUrl}/api/sessions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...( (OPENCLAW_TOKEN || OPENCLAW_PASSWORD) && { Authorization: `Bearer ${OPENCLAW_TOKEN || OPENCLAW_PASSWORD}` }),
+          ...(header && { Authorization: header }),
         },
         body: JSON.stringify({
           message: prompt,
@@ -94,11 +142,12 @@ export async function getSessionStatus(sessionId: string): Promise<{
 }> {
   let lastError: Error | null = null;
   const urls = getOpenClawUrls();
-  for (const baseUrl of urls) {
+  for (const url of urls) {
+    const { baseUrl, header } = getOpenClawAuth(url);
     try {
       const response = await fetch(`${baseUrl}/api/sessions/${sessionId}`, {
         headers: {
-          ...( (OPENCLAW_TOKEN || OPENCLAW_PASSWORD) && { Authorization: `Bearer ${OPENCLAW_TOKEN || OPENCLAW_PASSWORD}` }),
+          ...(header && { Authorization: header }),
         },
       });
 
@@ -124,13 +173,14 @@ export async function sendMessageToSession(
 ): Promise<OpenClawResponse> {
   let lastError: Error | null = null;
   const urls = getOpenClawUrls();
-  for (const baseUrl of urls) {
+  for (const url of urls) {
+    const { baseUrl, header } = getOpenClawAuth(url);
     try {
       const response = await fetch(`${baseUrl}/api/sessions/${sessionId}/messages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...( (OPENCLAW_TOKEN || OPENCLAW_PASSWORD) && { Authorization: `Bearer ${OPENCLAW_TOKEN || OPENCLAW_PASSWORD}` }),
+          ...(header && { Authorization: header }),
         },
         body: JSON.stringify({ message }),
       });
@@ -153,7 +203,8 @@ export async function sendMessageToSession(
  */
 export async function testOpenClawConnection(): Promise<boolean> {
   const urls = getOpenClawUrls();
-  for (const baseUrl of urls) {
+  for (const url of urls) {
+    const { baseUrl } = getOpenClawAuth(url);
     try {
       const response = await fetch(`${baseUrl}/api/health`, {
         method: "GET",

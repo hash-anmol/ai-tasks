@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@convex/_generated/api";
-import { getOpenClawUrls } from "@/lib/openclaw";
+import { getOpenClawUrls, getOpenClawAuth } from "@/lib/openclaw";
 import { logOpenClaw } from "@/lib/openclawLogger";
 
 export async function POST(request: NextRequest) {
@@ -75,13 +75,12 @@ export async function POST(request: NextRequest) {
       console.log("Direct update failed:", e);
     }
 
-    // Fire and forget - process in background (no waiting, Vercel has 60s timeout)
-    // OpenClaw will call webhook with progress updates
+    // Fire and forget - process in background
     const openClawUrls = getOpenClawUrls();
     
-    // Just fire the request - don't wait for response
-    // OpenClaw gateway will call our webhook with updates
-    for (const baseUrl of openClawUrls) {
+    for (const url of openClawUrls) {
+      const { baseUrl, header } = getOpenClawAuth(url);
+      
       logOpenClaw("info", "execute.dispatch", "Dispatch to OpenClaw (fire-and-forget)", {
         baseUrl,
         agent: agent || "main",
@@ -89,15 +88,11 @@ export async function POST(request: NextRequest) {
         sessionId: existingSessionId || null,
       }).catch(() => {});
       
-      const openClawToken = process.env.OPENCLAW_TOKEN || process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD;
-      
       fetch(`${baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(openClawToken && {
-            "Authorization": `Bearer ${openClawToken}`
-          }),
+          ...(header && { "Authorization": header }),
           "x-openclaw-agent-id": agent || "main",
           ...(existingSessionId && {
             "x-openclaw-session-id": existingSessionId
@@ -138,7 +133,7 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return NextResponse.json({ 
     status: "ok", 
-    openclawUrl: getOpenClawUrls(),
+    openclawUrls: getOpenClawUrls(),
     ready: true
   });
 }
