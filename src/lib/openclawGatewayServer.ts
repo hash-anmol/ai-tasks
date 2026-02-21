@@ -7,8 +7,8 @@ import {
   type ChatHistoryResult,
   type GatewayConnectParams,
   type SessionsListResult,
-  OPENCLAW_ORIGIN,
-} from "@/lib/openclaw";
+} from "@/lib/openclawGateway";
+import { OPENCLAW_ORIGIN } from "@/lib/openclaw";
 
 type GatewayFrame =
   | {

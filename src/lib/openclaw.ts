@@ -7,6 +7,21 @@ const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
 const OPENCLAW_PASSWORD = process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD;
 export const OPENCLAW_ORIGIN = process.env.OPENCLAW_ORIGIN || process.env.NEXT_PUBLIC_OPENCLAW_URL || undefined;
 
+export function buildGatewayWsUrl(httpUrl: string): string {
+  const trimmed = httpUrl.trim();
+  let base = trimmed;
+  if (base.startsWith("https://")) {
+    base = "wss://" + base.slice(8);
+  } else if (base.startsWith("http://")) {
+    base = "ws://" + base.slice(7);
+  }
+  // Remove trailing slash
+  if (base.endsWith("/")) {
+    base = base.slice(0, -1);
+  }
+  return base + "/gateway";
+}
+
 interface OpenClawSession {
   sessionId: string;
   status: string;
