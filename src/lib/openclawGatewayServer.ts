@@ -68,6 +68,9 @@ async function requestGatewayRaw<T>(
   const wsUrl = buildGatewayWsUrl(baseUrl);
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
+  console.log("[GatewayWS] Creating WebSocket to:", wsUrl);
+  console.log("[GatewayWS] Auth opts:", { hasToken: !!opts.token, hasPassword: !!opts.password });
+
   return new Promise<T>((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
     const pending = new Map<string, Pending>();
@@ -115,6 +118,7 @@ async function requestGatewayRaw<T>(
     };
 
     ws.onopen = () => {
+      console.log("[GatewayWS] WebSocket opened!");
       startTimer();
       const connectId = randomUUID();
       const connectParams = buildConnectParams(opts);
@@ -163,11 +167,13 @@ async function requestGatewayRaw<T>(
       handler.resolve(parsed);
     };
 
-    ws.onerror = () => {
+    ws.onerror = (event) => {
+      console.log("[GatewayWS] WebSocket error event:", event);
       fail(new Error("gateway websocket error"));
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      console.log("[GatewayWS] WebSocket closed, code:", event.code, "reason:", event.reason);
       if (!settled) {
         fail(new Error("gateway websocket closed"));
       }
