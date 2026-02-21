@@ -237,3 +237,43 @@ export async function testOpenClawConnection(): Promise<boolean> {
   }
   return false;
 }
+
+// Types for Gateway Server
+export type GatewayConnectParams = {
+  minProtocol: number;
+  maxProtocol: number;
+  client: {
+    id: string;
+    version: string;
+    platform: string;
+    mode: string;
+  };
+  caps: string[];
+  role: string;
+  scopes: string[];
+  auth?: {
+    token?: string;
+    password?: string;
+  };
+};
+
+export type SessionsListResult = {
+  sessions: Array<{
+    key: string;
+    label?: string;
+    activeMinutes?: number;
+    createdAt?: number;
+    lastMessageAt?: number;
+    kind?: string;
+  }>;
+};
+
+export type ChatHistoryResult = {
+  messages: Array<{
+    id: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    timestamp: number;
+  }>;
+  hasMore?: boolean;
+};
