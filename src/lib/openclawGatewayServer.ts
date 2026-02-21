@@ -75,9 +75,10 @@ async function requestGatewayRaw<T>(
 
   return new Promise<T>((resolve, reject) => {
     // Explicitly set Origin header to avoid "origin not allowed" errors
+    // @ts-expect-error - WebSocket headers option
     const wsOptions = OPENCLAW_ORIGIN 
-      ? { headers: { Origin: OPENCLAW_ORIGIN } } as any
-      : {};
+      ? { headers: { Origin: OPENCLAW_ORIGIN } }
+      : undefined;
     const ws = new WebSocket(wsUrl, wsOptions);
     const pending = new Map<string, Pending>();
     let settled = false;
