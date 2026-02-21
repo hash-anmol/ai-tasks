@@ -49,7 +49,7 @@ function buildConnectParams(opts: GatewayRequestOptions): GatewayConnectParams {
     },
     caps: [],
     role: "operator",
-    scopes: ["operator.admin", "operator.approvals", "operator.pairing", "operator.read"],
+    scopes: ["operator.read", "operator.admin", "operator.approvals", "operator.pairing"],
     auth:
       opts.token || opts.password
         ? {
