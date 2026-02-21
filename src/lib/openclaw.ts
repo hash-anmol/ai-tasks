@@ -5,6 +5,7 @@
 
 const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN;
 const OPENCLAW_PASSWORD = process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD;
+export const OPENCLAW_ORIGIN = process.env.OPENCLAW_ORIGIN || process.env.NEXT_PUBLIC_OPENCLAW_URL || undefined;
 
 interface OpenClawSession {
   sessionId: string;

@@ -7,7 +7,8 @@ import {
   type ChatHistoryResult,
   type GatewayConnectParams,
   type SessionsListResult,
-} from "@/lib/openclawGateway";
+  OPENCLAW_ORIGIN,
+} from "@/lib/openclaw";
 
 type GatewayFrame =
   | {
@@ -70,9 +71,14 @@ async function requestGatewayRaw<T>(
 
   console.log("[GatewayWS] Creating WebSocket to:", wsUrl);
   console.log("[GatewayWS] Auth opts:", { hasToken: !!opts.token, hasPassword: !!opts.password });
+  console.log("[GatewayWS] Origin header:", OPENCLAW_ORIGIN || "none (using default)");
 
   return new Promise<T>((resolve, reject) => {
-    const ws = new WebSocket(wsUrl);
+    // Explicitly set Origin header to avoid "origin not allowed" errors
+    // @ts-expect-error - Node.js WebSocket supports headers option
+    const ws = new WebSocket(wsUrl, { 
+      headers: OPENCLAW_ORIGIN ? { Origin: OPENCLAW_ORIGIN } : {} 
+    });
     const pending = new Map<string, Pending>();
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
