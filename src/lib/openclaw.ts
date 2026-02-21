@@ -84,11 +84,16 @@ export function getOpenClawAuth(baseUrl: string) {
   const finalToken = token?.trim();
   const finalPassword = password?.trim();
   
+  // Prefer password over token — the gateway authenticates with OPENCLAW_PASSWORD,
+  // not OPENCLAW_TOKEN. OPENCLAW_TOKEN is the hex gateway-registration token and
+  // is NOT accepted by the /v1/chat/completions endpoint.
+  const authCredential = finalPassword || finalToken;
+
   return {
     token: finalToken,
     password: finalPassword,
     baseUrl: urlAuth.cleanUrl,
-    header: (finalToken || finalPassword) ? `Bearer ${finalToken || finalPassword}` : undefined
+    header: authCredential ? `Bearer ${authCredential}` : undefined
   };
 }
 

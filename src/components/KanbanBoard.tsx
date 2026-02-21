@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 
 type TaskStatus = "inbox" | "assigned" | "in_progress" | "review" | "done";
 
@@ -51,12 +53,12 @@ interface ColumnConfig {
 const ALL_COLUMNS: ColumnConfig[] = [
   { id: "inbox", label: "Inbox", defaultVisible: true },
   { id: "assigned", label: "Assigned", defaultVisible: true },
-  { id: "active", label: "Active", defaultVisible: false },
+  { id: "active", label: "Active", defaultVisible: true },
   { id: "in_progress", label: "In Progress", defaultVisible: false },
-  { id: "review", label: "Review", defaultVisible: false },
-  { id: "blocked", label: "Blocked", defaultVisible: true },
+  { id: "review", label: "Review", defaultVisible: true },
+  { id: "blocked", label: "Blocked", defaultVisible: false },
   { id: "waiting", label: "Waiting", defaultVisible: false },
-  { id: "done", label: "Done", defaultVisible: true },
+  { id: "done", label: "Done", defaultVisible: false },
 ];
 
 // Check if all dependencies are completed
@@ -77,7 +79,7 @@ const getEffectiveColumn = (task: Task): string => {
       case "blocked":
         return "blocked";
       case "completed":
-        return "done";
+        return "review";
       case "failed":
         return "blocked";
       case "pending":
@@ -96,6 +98,55 @@ export default function KanbanBoard() {
   );
   const [showAll, setShowAll] = useState(false);
   const updateTaskStatus = useMutation(api.tasks.updateTaskStatus);
+  const deleteTaskMutation = useMutation(api.tasks.deleteTask);
+  const updateAIProgress = useMutation(api.tasks.updateAIProgress);
+  const [deletingTasks, setDeletingTasks] = useState<Set<string>>(new Set());
+  const [retryingTasks, setRetryingTasks] = useState<Set<string>>(new Set());
+
+  const handleDeleteTask = async (taskId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeletingTasks(prev => new Set(prev).add(taskId));
+    try {
+      await deleteTaskMutation({ id: taskId as Id<"tasks"> });
+    } catch (err) {
+      console.error("Failed to delete task:", err);
+    } finally {
+      setDeletingTasks(prev => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
+    }
+  };
+
+  const handleRetryTask = async (task: Task, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (retryingTasks.has(task._id)) return;
+    setRetryingTasks(prev => new Set(prev).add(task._id));
+    try {
+      await updateAIProgress({
+        id: task._id as Id<"tasks">,
+        aiStatus: "running",
+        aiProgress: 10,
+        aiResponseShort: "Retrying...",
+        aiBlockers: [],
+      });
+      await fetch("/api/openclaw/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: task.title,
+          description: task.description,
+          agent: task.agent,
+          taskId: task._id,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to retry task:", err);
+    } finally {
+      setRetryingTasks(prev => { const n = new Set(prev); n.delete(task._id); return n; });
+    }
+  };
 
   const taskList = (tasksQuery || []) as Task[];
 
@@ -420,9 +471,17 @@ export default function KanbanBoard() {
                     )}
 
                     {task.isAI && task.aiStatus === "failed" && (
-                      <div className="mt-3 flex items-center gap-1.5">
+                      <div className="mt-3 flex items-center gap-2">
                         <span className="material-symbols-outlined text-[14px] text-red-400">error</span>
                         <span className="text-[11px] text-red-400 font-medium">Failed</span>
+                        <button
+                          onClick={(e) => handleRetryTask(task, e)}
+                          disabled={retryingTasks.has(task._id)}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium text-blue-500 bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/20 transition-colors disabled:opacity-40"
+                        >
+                          <span className="material-icons text-[11px]">{retryingTasks.has(task._id) ? "hourglass_empty" : "refresh"}</span>
+                          {retryingTasks.has(task._id) ? "Retrying..." : "Retry"}
+                        </button>
                       </div>
                     )}
 
@@ -467,6 +526,16 @@ export default function KanbanBoard() {
                             {new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                           </span>
                         )}
+                        <button
+                          onClick={(e) => handleDeleteTask(task._id, e)}
+                          disabled={deletingTasks.has(task._id)}
+                          className="ml-auto flex items-center justify-center w-6 h-6 rounded-lg text-[var(--text-secondary)] hover:text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-30"
+                          title="Delete task"
+                        >
+                          <span className="material-icons text-[14px]">
+                            {deletingTasks.has(task._id) ? "hourglass_empty" : "delete_outline"}
+                          </span>
+                        </button>
                       </div>
 
                       {/* AI Progress bar for parent tasks */}

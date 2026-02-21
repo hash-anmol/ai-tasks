@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import AppFooter from "@/components/AppFooter";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -230,6 +231,10 @@ export default function AgentsPage() {
     <div className="h-screen overflow-hidden relative flex flex-col bg-[var(--background)]">
       {/* Header */}
       <header className="pt-12 pb-2 px-6 z-10 bg-[var(--background)]/80 backdrop-blur-sm">
+        <Link href="/" className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-light flex items-center gap-1 mb-2">
+          <span className="material-icons text-[16px]">arrow_back</span>
+          Tasks
+        </Link>
         <h1 className="font-display text-2xl text-[var(--text-primary)]">Agents</h1>
         <p className="text-sm text-[var(--text-secondary)] mt-1">AI agents working on your tasks</p>
       </header>

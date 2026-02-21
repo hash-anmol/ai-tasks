@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 
 interface Task {
   _id: string;
@@ -169,7 +170,37 @@ export default function TaskList({ agentFilter = "all", activeTab: activeTabProp
   const isLoading = tasksQuery === undefined;
   const taskList = tasksQuery || [];
   const updateTaskStatus = useMutation(api.tasks.updateTaskStatus);
+  const updateAIProgress = useMutation(api.tasks.updateAIProgress);
   const deleteTask = useMutation(api.tasks.deleteTask);
+  const [retryingTasks, setRetryingTasks] = useState<Set<string>>(new Set());
+
+  const handleRetryTask = async (task: Task) => {
+    if (retryingTasks.has(task._id)) return;
+    setRetryingTasks(prev => new Set(prev).add(task._id));
+    try {
+      await updateAIProgress({
+        id: task._id as Id<"tasks">,
+        aiStatus: "running",
+        aiProgress: 10,
+        aiResponseShort: "Retrying...",
+        aiBlockers: [],
+      });
+      await fetch("/api/openclaw/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: task.title,
+          description: task.description,
+          agent: task.agent,
+          taskId: task._id,
+        }),
+      });
+    } catch (err) {
+      console.error("Retry failed:", err);
+    } finally {
+      setRetryingTasks(prev => { const n = new Set(prev); n.delete(task._id); return n; });
+    }
+  };
 
   // Build subtask lookup: parentId -> subtasks[]
   const subtasksByParent = new Map<string, Task[]>();
@@ -262,6 +293,8 @@ export default function TaskList({ agentFilter = "all", activeTab: activeTabProp
         subtasks={subtasks}
         onToggle={handleToggleStatus}
         onDelete={handleDelete}
+        onRetry={handleRetryTask}
+        retryingTasks={retryingTasks}
         allTasks={taskList as Task[]}
         {...props}
       />
@@ -307,11 +340,13 @@ export default function TaskList({ agentFilter = "all", activeTab: activeTabProp
   );
 }
 
-function TaskWithSubtasks({ task, subtasks, onToggle, onDelete, allTasks, isBlocked, blockedLabel, dependencyBlockers }: {
+function TaskWithSubtasks({ task, subtasks, onToggle, onDelete, onRetry, retryingTasks, allTasks, isBlocked, blockedLabel, dependencyBlockers }: {
   task: Task;
   subtasks: Task[];
   onToggle: (task: Task) => void;
   onDelete: (id: string) => void;
+  onRetry: (task: Task) => void;
+  retryingTasks: Set<string>;
   allTasks: Task[];
   isBlocked?: boolean;
   blockedLabel?: string;
@@ -327,6 +362,8 @@ function TaskWithSubtasks({ task, subtasks, onToggle, onDelete, allTasks, isBloc
         task={task}
         onToggle={onToggle}
         onDelete={onDelete}
+        onRetry={onRetry}
+        retryingTasks={retryingTasks}
         isBlocked={isBlocked}
         blockedLabel={blockedLabel}
         dependencyBlockers={dependencyBlockers}
@@ -360,6 +397,8 @@ function TaskWithSubtasks({ task, subtasks, onToggle, onDelete, allTasks, isBloc
               task={subtask}
               onToggle={onToggle}
               onDelete={onDelete}
+              onRetry={onRetry}
+              retryingTasks={retryingTasks}
               isBlocked={subtask.aiStatus === "blocked"}
               dependencyBlockers={getDependencyBlockers(subtask, allTasks)}
               isSubtaskCard
@@ -371,10 +410,12 @@ function TaskWithSubtasks({ task, subtasks, onToggle, onDelete, allTasks, isBloc
   );
 }
 
-function TaskCard({ task, onToggle, onDelete, isBlocked = false, blockedLabel = "Blocked", dependencyBlockers = [], subtaskCount, subtaskDoneCount, onToggleSubtasks, subtasksExpanded, isSubtaskCard = false }: { 
+function TaskCard({ task, onToggle, onDelete, onRetry, retryingTasks = new Set(), isBlocked = false, blockedLabel = "Blocked", dependencyBlockers = [], subtaskCount, subtaskDoneCount, onToggleSubtasks, subtasksExpanded, isSubtaskCard = false }: { 
   task: Task; 
   onToggle: (task: Task) => void;
   onDelete: (id: string) => void;
+  onRetry?: (task: Task) => void;
+  retryingTasks?: Set<string>;
   isBlocked?: boolean;
   blockedLabel?: string;
   dependencyBlockers?: Task[];
@@ -556,20 +597,32 @@ function TaskCard({ task, onToggle, onDelete, isBlocked = false, blockedLabel = 
                 </span>
               )}
               {task.aiStatus === "completed" && (
-                <span className="text-[10px] text-[var(--text-secondary)] font-light flex items-center gap-0.5 opacity-60 ml-1">
-                  <span className="material-icons text-[10px] text-green-500">check_circle</span>
-                  Done
+                <span className="text-[10px] text-amber-500 font-medium flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+                  <span className="material-icons text-[10px]">rate_review</span>
+                  Review
                   {task.aiStartedAt && task.aiCompletedAt && (
-                    <span className="opacity-50"> · {formatDuration(task.aiCompletedAt - task.aiStartedAt)}</span>
+                    <span className="opacity-60 font-light"> · {formatDuration(task.aiCompletedAt - task.aiStartedAt)}</span>
                   )}
                 </span>
               )}
               {task.aiStatus === "failed" && (
-                <span className="text-[10px] text-red-400 font-light flex items-center gap-0.5 ml-1">
-                  <span className="material-icons text-[10px]">error</span>
-                  Failed
-                  {task.aiStartedAt && task.aiCompletedAt && (
-                    <span className="opacity-50"> · {formatDuration(task.aiCompletedAt - task.aiStartedAt)}</span>
+                <span className="flex items-center gap-1 ml-1">
+                  <span className="text-[10px] text-red-400 font-light flex items-center gap-0.5">
+                    <span className="material-icons text-[10px]">error</span>
+                    Failed
+                    {task.aiStartedAt && task.aiCompletedAt && (
+                      <span className="opacity-50"> · {formatDuration(task.aiCompletedAt - task.aiStartedAt)}</span>
+                    )}
+                  </span>
+                  {onRetry && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onRetry(task); }}
+                      disabled={retryingTasks.has(task._id)}
+                      className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium text-blue-500 bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/20 transition-colors disabled:opacity-40"
+                    >
+                      <span className="material-icons text-[10px]">{retryingTasks.has(task._id) ? "hourglass_empty" : "refresh"}</span>
+                      {retryingTasks.has(task._id) ? "Retrying..." : "Retry"}
+                    </button>
                   )}
                 </span>
               )}

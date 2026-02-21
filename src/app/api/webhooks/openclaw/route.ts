@@ -6,15 +6,36 @@ import { logOpenClaw } from "@/lib/openclawLogger";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    console.log("[WEBHOOK] Received webhook payload:", JSON.stringify(body, null, 2));
+    
     const { sessionId, status, message, progress, response, taskId, blockers, agent, prompt } = body;
 
-    console.log("OpenClaw webhook:", { sessionId, status, taskId });
-    await logOpenClaw("info", "webhook.received", "Webhook received", {
+    console.log("[WEBHOOK] Parsed webhook data:", {
+      sessionId,
+      status,
+      progress,
+      hasResponse: !!response,
+      responseLength: response?.length || 0,
+      responsePreview: response?.slice(0, 200) || message?.slice(0, 200) || "none",
+      taskId,
+      blockers: blockers?.length || 0,
+      agent,
+      hasPrompt: !!prompt,
+    });
+    
+    await logOpenClaw("info", "webhook.received", "Webhook received - FULL PAYLOAD", {
       sessionId: sessionId || null,
       status: status || null,
-      taskId: taskId || null,
-      agent: agent || null,
       progress: progress ?? null,
+      hasResponse: !!response,
+      responseLength: response?.length || 0,
+      responsePreview: response?.slice(0, 500) || message?.slice(0, 500) || "none",
+      taskId: taskId || null,
+      blockers: blockers || null,
+      agent: agent || null,
+      promptLength: prompt?.length || 0,
+      promptPreview: prompt?.slice(0, 200) || null,
+      fullBody: JSON.stringify(body).slice(0, 2000), // Log full body for debugging
     });
 
     if (!taskId) {
@@ -45,6 +66,24 @@ export async function POST(request: NextRequest) {
       ? [responseText]
       : undefined;
 
+    console.log("[WEBHOOK] Storing to Convex:", {
+      taskId,
+      aiStatus: normalizedStatus,
+      aiProgress: normalizedProgress,
+      aiResponseLength: responseText?.length || 0,
+      aiResponseShort: responseShort,
+      aiBlockers: blockerList,
+    });
+
+    await logOpenClaw("info", "webhook.storing", "Storing to Convex", {
+      taskId,
+      aiStatus: normalizedStatus,
+      aiProgress: normalizedProgress,
+      aiResponseLength: responseText?.length || 0,
+      aiResponseShort: responseShort,
+      aiBlockers: blockerList,
+    });
+
     await convexMutation(api.tasks.updateAIProgress, {
       id: taskId,
       aiStatus: normalizedStatus,
@@ -53,6 +92,8 @@ export async function POST(request: NextRequest) {
       aiResponseShort: responseShort,
       aiBlockers: blockerList,
     });
+
+    console.log("[WEBHOOK] Successfully stored to Convex, taskId:", taskId);
 
     if (sessionId) {
       await convexMutation(api.tasks.updateTask, {
@@ -172,7 +213,7 @@ async function updateParentProgress(
       }, { skipQueue: true } as any);
       await convex.mutation(api.tasks.updateTaskStatus as any, {
         id: parentTaskId,
-        status: "done",
+        status: "review",
       }, { skipQueue: true } as any);
     } else {
       // Partial progress — update parent to show running state

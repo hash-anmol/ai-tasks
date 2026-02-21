@@ -52,8 +52,8 @@ function buildConnectParams(opts: GatewayRequestOptions): GatewayConnectParams {
     auth:
       opts.token || opts.password
         ? {
-            token: opts.token,
-            password: opts.password,
+            token: opts.token ?? undefined,
+            password: opts.password ?? undefined,
           }
         : undefined,
   };

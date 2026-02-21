@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import AppFooter from "@/components/AppFooter";
@@ -23,6 +23,7 @@ interface Task {
   aiResponseShort?: string;
   aiBlockers?: string[];
   openclawSessionId?: string;
+  openclawTaskId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -72,11 +73,24 @@ function AIWorkContent() {
   const tasksQuery = useQuery(api.tasks.getTasks);
   const runsQuery = useQuery(api.agentRuns.getAgentRuns);
   const isLoading = tasksQuery === undefined || runsQuery === undefined;
+  const updateTaskStatus = useMutation(api.tasks.updateTaskStatus);
   const updateAIProgress = useMutation(api.tasks.updateAIProgress);
   const deleteTask = useMutation(api.tasks.deleteTask);
   const [stoppingTasks, setStoppingTasks] = useState<Set<string>>(new Set());
   const [deletingTasks, setDeletingTasks] = useState<Set<string>>(new Set());
   const [retryingTasks, setRetryingTasks] = useState<Set<string>>(new Set());
+  const [continueChatInput, setContinueChatInput] = useState("");
+  const [sendingContinue, setSendingContinue] = useState(false);
+  const continueChatRef = useRef<HTMLTextAreaElement>(null);
+  const pollingRef = useRef<Set<string>>(new Set());
+  // Per-task polling attempt counters and consecutive-error counters
+  const pollAttemptsRef = useRef<Map<string, number>>(new Map());
+  const poll502CountRef = useRef<Map<string, number>>(new Map());
+  // Local chat messages for the focused task continue-chat thread
+  const [chatMessages, setChatMessages] = useState<{ role: "user" | "assistant"; content: string; id: string }[]>([]);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  // Track the last aiResponse we've already shown in chatMessages to avoid duplicate appends
+  const lastSeenAiResponseRef = useRef<string | null>(null);
   
   const tasks = (tasksQuery || []) as Task[];
   const allRuns = (runsQuery || []) as AgentRun[];
@@ -86,6 +100,151 @@ function AIWorkContent() {
   
   const aiTasks = tasks.filter(t => t.isAI);
   const focusedTask = focusedTaskId ? tasks.find(t => t._id === focusedTaskId) : null;
+
+  // Max total polling attempts per task (60 × 5s = 5 minutes)
+  const POLL_MAX_ATTEMPTS = 60;
+  // Max consecutive 502/gateway-down responses before giving up
+  const POLL_MAX_CONSECUTIVE_502 = 5;
+
+  const startPollingTask = async (task: Task) => {
+    if (!task.openclawSessionId || pollingRef.current.has(task._id)) return;
+    pollingRef.current.add(task._id);
+
+    // Increment total attempt counter
+    const attempts = (pollAttemptsRef.current.get(task._id) ?? 0) + 1;
+    pollAttemptsRef.current.set(task._id, attempts);
+    console.log(`[poll] task=${task._id} attempt=${attempts}/${POLL_MAX_ATTEMPTS}`);
+
+    try {
+      const statusRes = await fetch(`/api/openclaw/status/${encodeURIComponent(task.openclawSessionId)}`);
+
+      // Gateway down or server error
+      if (!statusRes.ok) {
+        const consecutive502 = (poll502CountRef.current.get(task._id) ?? 0) + 1;
+        poll502CountRef.current.set(task._id, consecutive502);
+        console.warn(`[poll] task=${task._id} non-ok status=${statusRes.status} consecutive=${consecutive502}`);
+
+        if (consecutive502 >= POLL_MAX_CONSECUTIVE_502) {
+          console.error(`[poll] task=${task._id} reached ${POLL_MAX_CONSECUTIVE_502} consecutive gateway errors — marking failed`);
+          await updateAIProgress({
+            id: task._id as Id<"tasks">,
+            aiStatus: "failed",
+            aiProgress: 0,
+            aiResponseShort: `OpenClaw unreachable after ${consecutive502} attempts (HTTP ${statusRes.status})`,
+          });
+          pollAttemptsRef.current.delete(task._id);
+          poll502CountRef.current.delete(task._id);
+        }
+        return;
+      }
+
+      // Successful HTTP response — reset consecutive-502 counter
+      poll502CountRef.current.set(task._id, 0);
+
+      const statusData = await statusRes.json();
+      console.log(`[poll] task=${task._id} openclawStatus=${statusData?.status}`);
+
+      if (statusData?.status === "completed") {
+        const historyRes = await fetch(`/api/openclaw/sessions/${encodeURIComponent(task.openclawSessionId)}?limit=200`);
+        if (!historyRes.ok) {
+          console.warn(`[poll] task=${task._id} failed to fetch session history (${historyRes.status})`);
+          return;
+        }
+        const historyData = await historyRes.json();
+        const messages = Array.isArray(historyData?.messages) ? historyData.messages : [];
+
+        let responseText = "";
+        for (const entry of messages) {
+          const msg = (entry as any)?.message;
+          if (!msg || msg.role !== "assistant") continue;
+          const content = Array.isArray(msg.content) ? msg.content : [];
+          const textParts = content
+            .filter((part: any) => part?.type === "text" && typeof part?.text === "string")
+            .map((part: any) => part.text);
+          if (textParts.length > 0) {
+            responseText += (responseText ? "\n\n" : "") + textParts.join("\n");
+          }
+        }
+
+        const responseShort = responseText ? responseText.slice(0, 200) : undefined;
+
+        console.log(`[poll] task=${task._id} completed — saving response (${responseText.length} chars)`);
+        await updateAIProgress({
+          id: task._id as Id<"tasks">,
+          aiStatus: "completed",
+          aiProgress: 100,
+          aiResponse: responseText || undefined,
+          aiResponseShort: responseShort,
+        });
+        // Clean up counters on success
+        pollAttemptsRef.current.delete(task._id);
+        poll502CountRef.current.delete(task._id);
+      } else if (attempts >= POLL_MAX_ATTEMPTS) {
+        // Still running after max attempts
+        console.error(`[poll] task=${task._id} exceeded max attempts (${POLL_MAX_ATTEMPTS}) — marking failed`);
+        await updateAIProgress({
+          id: task._id as Id<"tasks">,
+          aiStatus: "failed",
+          aiProgress: 0,
+          aiResponseShort: `Timed out after ${POLL_MAX_ATTEMPTS} polling attempts (~5 minutes)`,
+        });
+        pollAttemptsRef.current.delete(task._id);
+        poll502CountRef.current.delete(task._id);
+      }
+    } catch (err) {
+      console.error(`[poll] task=${task._id} network error:`, err);
+      const consecutive502 = (poll502CountRef.current.get(task._id) ?? 0) + 1;
+      poll502CountRef.current.set(task._id, consecutive502);
+      if (consecutive502 >= POLL_MAX_CONSECUTIVE_502) {
+        console.error(`[poll] task=${task._id} ${consecutive502} consecutive network errors — marking failed`);
+        await updateAIProgress({
+          id: task._id as Id<"tasks">,
+          aiStatus: "failed",
+          aiProgress: 0,
+          aiResponseShort: `Network error after ${consecutive502} consecutive failures`,
+        });
+        pollAttemptsRef.current.delete(task._id);
+        poll502CountRef.current.delete(task._id);
+      }
+    } finally {
+      pollingRef.current.delete(task._id);
+    }
+  };
+
+  useEffect(() => {
+    const runningTasks = aiTasks.filter(
+      (t) => t.aiStatus === "running" && t.openclawSessionId
+    );
+
+    if (runningTasks.length === 0) return;
+
+    const interval = setInterval(() => {
+      runningTasks.forEach((task) => {
+        startPollingTask(task).catch(() => {});
+      });
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [aiTasks]);
+
+  // When the focused task's aiResponse changes (Convex reactive update), append the
+  // new response as an assistant message in the local chat thread — but only if
+  // the user has already sent a message (so we don't spam the thread on initial load)
+  // and only if we haven't already shown this exact response text.
+  useEffect(() => {
+    if (!focusedTask) return;
+    const newResponse = focusedTask.aiResponse;
+    if (!newResponse) return;
+    // Only append after the user has sent at least one continue-chat message
+    const userSent = chatMessages.some(m => m.role === "user");
+    if (!userSent) return;
+    // Avoid duplicate appends
+    if (lastSeenAiResponseRef.current === newResponse) return;
+    lastSeenAiResponseRef.current = newResponse;
+    const assistantMsgId = `assistant-${Date.now()}`;
+    setChatMessages(prev => [...prev, { role: "assistant", content: newResponse, id: assistantMsgId }]);
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+  }, [focusedTask?.aiResponse]);
 
   // Get runs sorted by most recent
   const getFilteredRuns = () => {
@@ -169,9 +328,55 @@ function AIWorkContent() {
     }
   };
 
+  // Continue an existing AI session with a follow-up message
+  const handleContinueChat = async (task: Task, message: string) => {
+    if (!message.trim() || sendingContinue) return;
+    setSendingContinue(true);
+    setContinueChatInput("");
+
+    // Append user message immediately
+    const userMsgId = `user-${Date.now()}`;
+    setChatMessages(prev => [...prev, { role: "user", content: message.trim(), id: userMsgId }]);
+    // Scroll to bottom after state update
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+
+    try {
+      // Set task back to running
+      await updateAIProgress({
+        id: task._id as Id<"tasks">,
+        aiStatus: "running",
+        aiProgress: 10,
+        aiResponseShort: "Continuing...",
+      });
+      await updateTaskStatus({ id: task._id as Id<"tasks">, status: "in_progress" });
+
+      // Send follow-up to OpenClaw using the same session
+      const res = await fetch("/api/openclaw/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: message.trim(),
+          description: undefined,
+          agent: task.agent,
+          taskId: task._id,
+          sessionId: task.openclawSessionId || undefined,
+        }),
+      });
+      if (!res.ok) {
+        console.error("Continue chat failed:", await res.text());
+        setChatMessages(prev => [...prev, { role: "assistant", content: "Error: failed to send message. Check that OpenClaw is running.", id: `err-${Date.now()}` }]);
+      }
+    } catch (err) {
+      console.error("Continue chat error:", err);
+      setChatMessages(prev => [...prev, { role: "assistant", content: "Error: could not reach OpenClaw.", id: `err-${Date.now()}` }]);
+    } finally {
+      setSendingContinue(false);
+    }
+  };
+
   const getStatusIndicator = (status: string) => {
     switch (status) {
-      case "completed": return { icon: "check_circle", color: "text-green-500", label: "Completed" };
+      case "completed": return { icon: "rate_review", color: "text-amber-500", label: "Review" };
       case "running": return { icon: "sync", color: "text-blue-500", label: "Running" };
       case "blocked": return { icon: "error", color: "text-red-400", label: "Blocked" };
       case "failed": return { icon: "cancel", color: "text-red-500", label: "Failed" };
@@ -315,7 +520,70 @@ function AIWorkContent() {
           )}
         </main>
 
-        <AppFooter />
+        {/* Continue Chat Bar — fixed at bottom */}
+        <div className="flex-shrink-0 border-t border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-sm px-4 pt-3 pb-4">
+          {/* Local chat messages thread */}
+          {chatMessages.length > 0 && (
+            <div className="mb-3 max-h-48 overflow-y-auto hide-scrollbar space-y-2">
+              {chatMessages.map(msg => (
+                <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-[13px] font-light leading-relaxed ${
+                    msg.role === "user"
+                      ? "bg-[var(--text-primary)] text-[var(--background)] rounded-br-sm"
+                      : "bg-[var(--surface)] text-[var(--text-primary)] rounded-bl-sm border border-[var(--border)]"
+                  }`}>
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+          )}
+          <div className="flex items-end gap-2 max-w-2xl mx-auto">
+            <div className="flex-1 relative">
+              <textarea
+                ref={continueChatRef}
+                value={continueChatInput}
+                onChange={(e) => {
+                  setContinueChatInput(e.target.value);
+                  // Auto-resize
+                  e.target.style.height = "auto";
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleContinueChat(focusedTask, continueChatInput);
+                  }
+                }}
+                placeholder={
+                  focusedTask.aiStatus === "running"
+                    ? "AI is working..."
+                    : "Continue this task... (Enter to send, Shift+Enter for newline)"
+                }
+                disabled={focusedTask.aiStatus === "running" || sendingContinue}
+                rows={1}
+                className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] text-[14px] font-light px-4 py-3 pr-12 placeholder:text-[var(--text-secondary)] placeholder:opacity-40 focus:outline-none focus:border-[var(--text-primary)]/30 disabled:opacity-40 transition-colors leading-snug"
+                style={{ minHeight: "44px", maxHeight: "120px", overflowY: "auto" }}
+              />
+            </div>
+            <button
+              onClick={() => handleContinueChat(focusedTask, continueChatInput)}
+              disabled={!continueChatInput.trim() || focusedTask.aiStatus === "running" || sendingContinue}
+              className="flex-shrink-0 w-10 h-10 rounded-full bg-[var(--text-primary)] text-[var(--background)] flex items-center justify-center hover:opacity-80 active:scale-95 transition-all disabled:opacity-30"
+              title="Send follow-up"
+            >
+              {sendingContinue ? (
+                <span className="material-icons text-[18px] animate-spin">sync</span>
+              ) : (
+                <span className="material-icons text-[18px]">arrow_upward</span>
+              )}
+            </button>
+          </div>
+          <p className="text-center text-[10px] text-[var(--text-secondary)] opacity-30 mt-1.5 font-light">
+            Continues the same AI session · Mark done by checking the circle in Tasks
+          </p>
+        </div>
       </div>
     );
   }
@@ -327,6 +595,10 @@ function AIWorkContent() {
   return (
     <div className="h-screen overflow-hidden relative flex flex-col bg-[var(--background)]">
       <header className="pt-14 pb-4 px-6 bg-[var(--background)]/80 backdrop-blur-sm z-10 border-b border-[var(--border)]">
+        <Link href="/" className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-light flex items-center gap-1 mb-3">
+          <span className="material-icons text-[16px]">arrow_back</span>
+          Tasks
+        </Link>
         <h1 className="font-display text-2xl font-light text-[var(--text-primary)] mb-5">AI Work</h1>
         
         {/* Agent filter pills */}

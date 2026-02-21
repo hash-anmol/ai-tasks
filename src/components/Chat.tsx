@@ -934,11 +934,6 @@ export default function Chat() {
             <p className="text-[var(--text-secondary)] text-xs font-light max-w-[260px] opacity-50 leading-relaxed">
               Ask questions, get help with tasks, or have the agent create and manage tasks for you.
             </p>
-            {connected === false && (
-              <div className="mt-4 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-500">
-                OpenClaw not reachable. Check that the server is running.
-              </div>
-            )}
           </div>
         )}
 

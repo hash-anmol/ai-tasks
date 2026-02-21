@@ -47,10 +47,10 @@ export async function POST(request: NextRequest) {
       aiResponseShort: responseShort,
     });
 
-    // Update task status to done
+    // Update task status to review (not done — keep visible for user review)
     await convex.mutation(api.tasks.updateTaskStatus, {
       id: taskId,
-      status: "done",
+      status: "review",
     });
 
     // Check if this was a subtask — update parent progress
@@ -127,7 +127,7 @@ async function updateParentProgress(
       });
       await convex.mutation(api.tasks.updateTaskStatus, {
         id: parentTaskId as any,
-        status: "done",
+        status: "review",
       });
     } else {
       // Partial progress
