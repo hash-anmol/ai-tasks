@@ -42,7 +42,7 @@ function buildConnectParams(opts: GatewayRequestOptions): GatewayConnectParams {
     minProtocol: 3,
     maxProtocol: 3,
     client: {
-      id: "webchat-ui",
+      id: "openclaw-control-ui",
       version: "ai-tasks",
       platform: "server",
       mode: "backend",
