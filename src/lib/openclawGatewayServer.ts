@@ -129,15 +129,21 @@ async function requestGatewayRaw<T>(
       startTimer();
       const connectId = randomUUID();
       const connectParams = buildConnectParams(opts);
+      console.log("[GatewayWS] >>>AMS ( CONNECT PARscopes):", JSON.stringify(connectParams.scopes));
+      console.log("[GatewayWS] >>> FULL CONNECT PARAMS:", JSON.stringify(connectParams));
       pending.set(connectId, {
         resolve: (frame) => {
           pending.delete(connectId);
+          console.log("[GatewayWS] >>> CONNECT RESPONSE frame:", JSON.stringify(frame));
           if (frame.type !== "res") return;
           if (!frame.ok) {
+            console.log("[GatewayWS] >>> CONNECT FAILED:", frame.error?.message);
             fail(new Error(frame.error?.message || "gateway connect failed"));
             return;
           }
+          console.log("[GatewayWS] >>> CONNECT SUCCESS - now requesting method:", method);
           const requestId = randomUUID();
+          console.log("[GatewayWS] >>> SENDING METHOD REQUEST:", method, "params:", JSON.stringify(params));
           sendRequest(requestId, {
             type: "req",
             id: requestId,
@@ -168,6 +174,7 @@ async function requestGatewayRaw<T>(
       } catch {
         return;
       }
+      console.log("[GatewayWS] <<< INCOMING MESSAGE:", JSON.stringify(parsed).slice(0, 500));
       if (!parsed || parsed.type !== "res") return;
       const handler = pending.get(parsed.id);
       if (!handler) return;
