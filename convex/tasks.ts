@@ -1,5 +1,6 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation, action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 
 // Get all tasks
 export const getTasks = query({
@@ -73,7 +74,7 @@ export const getHeartbeatTasks = query({
       .filter((q) =>
         q.and(
           q.eq(q.field("heartbeatAgentId"), args.agent),
-          q.eq(q.field("aiStatus"), "pending")
+          q.eq(q.field("aiStatus"), "assigned")
         )
       )
       .collect();
@@ -133,12 +134,34 @@ export const createTask = mutation({
   handler: async (ctx, args) => {
     const taskId = await ctx.db.insert("tasks", {
       ...args,
-      aiStatus: args.isAI ? "pending" : undefined,
+      aiStatus: args.isAI ? "assigned" : undefined,
       aiStartedAt: undefined,
       aiProgress: args.isAI ? 0 : undefined,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
+
+    // If it's an AI task and has a scheduled time, schedule it using Convex scheduler
+    if (args.isAI && args.scheduledAt && args.scheduledAt > Date.now()) {
+      const scheduledJobId = await ctx.scheduler.runAt(args.scheduledAt, internal.tasks.executeScheduledTask, {
+        id: taskId,
+        title: args.title,
+        description: args.description,
+        agent: args.agent,
+      });
+      
+      // Store the job ID so we can potentially cancel it later
+      await ctx.db.patch(taskId, {
+        scheduledTaskId: scheduledJobId,
+      });
+      
+      console.log(`Scheduled AI task ${taskId} for ${new Date(args.scheduledAt).toISOString()} (Job ID: ${scheduledJobId})`);
+    } else if (args.isAI && !args.scheduledAt && !args.heartbeatAgentId) {
+      // If it's an immediate AI task and NOT a heartbeat task, we could also schedule it for "now"
+      // But the frontend currently handles immediate execution via /api/openclaw/execute
+      console.log(`Immediate AI task ${taskId} created (will be executed by frontend)`);
+    }
+
     return taskId;
   },
 });
@@ -241,5 +264,54 @@ export const deleteTask = mutation({
   args: { id: v.id("tasks") },
   handler: async (ctx, args) => {
     await ctx.db.delete(args.id);
+  },
+});
+
+// Internal mutation to clear scheduledTaskId
+export const clearScheduledTask = internalMutation({
+  args: { id: v.id("tasks") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      scheduledTaskId: undefined,
+    });
+  },
+});
+
+// Action to execute a scheduled task via the app's own execution endpoint
+export const executeScheduledTask = internalAction({
+  args: { 
+    id: v.id("tasks"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    agent: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const appUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    
+    try {
+      console.log(`[SCHEDULED] Executing task ${args.id}: ${args.title}`);
+      
+      const response = await fetch(`${appUrl}/api/openclaw/execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: args.title,
+          description: args.description,
+          agent: args.agent,
+          taskId: args.id,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error(`[SCHEDULED] Failed to execute task ${args.id}: ${response.statusText}`);
+      } else {
+        console.log(`[SCHEDULED] Task ${args.id} executed successfully`);
+      }
+    } catch (err) {
+      console.error(`[SCHEDULED] Error executing task ${args.id}:`, err);
+    } finally {
+      // Clear the scheduledTaskId regardless of success
+      await ctx.runMutation(internal.tasks.clearScheduledTask, { id: args.id });
+    }
   },
 });

@@ -21,6 +21,7 @@ export default defineSchema({
     aiResponseShort: v.optional(v.string()),
     aiBlockers: v.optional(v.array(v.string())),
     scheduledAt: v.optional(v.number()),
+    scheduledTaskId: v.optional(v.string()), // Convex scheduled job ID
     dependsOn: v.optional(v.array(v.string())),
     // Subtask fields
     parentTaskId: v.optional(v.string()), // ID of parent task (if this is a subtask)
