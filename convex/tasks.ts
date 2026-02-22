@@ -1,6 +1,57 @@
 import { query, mutation, internalMutation, action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api";
+
+// --- OpenClaw Helpers (ported from src/lib/openclaw.ts) ---
+
+function getAuthFromUrl(urlStr: string) {
+  let workingUrl = urlStr.trim();
+  if (!workingUrl.startsWith("http://") && !workingUrl.startsWith("https://")) {
+    workingUrl = "https://" + workingUrl;
+  }
+  try {
+    const url = new URL(workingUrl);
+    const token = url.searchParams.get("token");
+    const password = url.searchParams.get("password");
+    url.search = "";
+    const cleanUrl = url.toString().replace(/\/$/, "");
+    return { token: token || undefined, password: password || undefined, cleanUrl };
+  } catch {
+    return { cleanUrl: urlStr.split("?")[0].replace(/\/$/, "") };
+  }
+}
+
+function getOpenClawUrls() {
+  const primary = process.env.OPENCLAW_URL || process.env.NEXT_PUBLIC_OPENCLAW_URL;
+  const fallbacks = process.env.OPENCLAW_FALLBACK_URLS ? process.env.OPENCLAW_FALLBACK_URLS.split(",") : [];
+  const all = [];
+  if (primary) all.push(primary);
+  all.push(...fallbacks);
+  
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const url of all) {
+    const trimmed = url.trim();
+    if (trimmed && !seen.has(trimmed)) {
+      seen.add(trimmed);
+      normalized.push(trimmed);
+    }
+  }
+  return normalized.length > 0 ? normalized : ["http://127.0.0.1:18789"];
+}
+
+function getOpenClawAuth(baseUrl: string) {
+  const urlAuth = getAuthFromUrl(baseUrl);
+  const token = urlAuth.token || process.env.OPENCLAW_TOKEN;
+  const password = urlAuth.password || process.env.OPENCLAW_PASSWORD || process.env.OPENCLAW_GATEWAY_PASSWORD;
+  const authCredential = (password || token)?.trim();
+  return {
+    baseUrl: urlAuth.cleanUrl,
+    header: authCredential ? `Bearer ${authCredential}` : undefined
+  };
+}
+
+// --- Convex Functions ---
 
 // Get all tasks
 export const getTasks = query({
@@ -277,7 +328,7 @@ export const clearScheduledTask = internalMutation({
   },
 });
 
-// Action to execute a scheduled task via the app's own execution endpoint
+// Action to execute a scheduled task via OpenClaw
 export const executeScheduledTask = internalAction({
   args: { 
     id: v.id("tasks"),
@@ -286,32 +337,121 @@ export const executeScheduledTask = internalAction({
     agent: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const appUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const { id, title, description, agent } = args;
     
     try {
-      console.log(`[SCHEDULED] Executing task ${args.id}: ${args.title}`);
+      console.log(`[SCHEDULED] Starting execution for task ${id}: ${title}`);
       
-      const response = await fetch(`${appUrl}/api/openclaw/execute`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: args.title,
-          description: args.description,
-          agent: args.agent,
-          taskId: args.id,
-        }),
+      const agentId = agent || "main";
+      const model = process.env.OPENCLAW_DEFAULT_MODEL || "google/gemini-3-flash-preview";
+      const prompt = description ? `Task: ${title}\n\nDescription: ${description}` : `Task: ${title}`;
+      const sessionKey = `agent:${agentId}:task:${id}`;
+
+      // 1. Update status to running
+      await ctx.runMutation(api.tasks.updateAIProgress, {
+        id,
+        aiStatus: "running",
+        aiProgress: 10,
+        aiResponseShort: "Task started via scheduler...",
       });
 
-      if (!response.ok) {
-        console.error(`[SCHEDULED] Failed to execute task ${args.id}: ${response.statusText}`);
-      } else {
-        console.log(`[SCHEDULED] Task ${args.id} executed successfully`);
+      await ctx.runMutation(api.tasks.updateTask, {
+        id,
+        openclawSessionId: sessionKey,
+      });
+
+      // 2. Dispatch to OpenClaw
+      const openClawUrls = getOpenClawUrls();
+      let dispatched = false;
+      const errors: string[] = [];
+
+      for (const url of openClawUrls) {
+        const { baseUrl, header } = getOpenClawAuth(url);
+        console.log(`[SCHEDULED] Trying OpenClaw at ${baseUrl}`);
+
+        try {
+          const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(header && { "Authorization": header }),
+              "x-openclaw-agent-id": agentId,
+              "x-openclaw-session-key": sessionKey,
+              "x-openclaw-task-id": id,
+            },
+            body: JSON.stringify({
+              model,
+              messages: [{ role: "user", content: prompt }],
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const content = data?.choices?.[0]?.message?.content || "";
+            
+            if (content) {
+              console.log(`[SCHEDULED] Task ${id} completed successfully`);
+              
+              // 3. Update Convex with results
+              await ctx.runMutation(api.tasks.updateAIProgress, {
+                id,
+                aiStatus: "completed",
+                aiProgress: 100,
+                aiResponse: content,
+                aiResponseShort: content.slice(0, 200),
+              });
+
+              await ctx.runMutation(api.tasks.updateTaskStatus, {
+                id,
+                status: "review",
+              });
+
+              // Create agent run record
+              const runId = await ctx.runMutation(api.agentRuns.createAgentRun, {
+                taskId: id,
+                agent: agentId,
+                prompt,
+              } as any);
+
+              if (runId) {
+                await ctx.runMutation(api.agentRuns.completeAgentRun, {
+                  id: runId as any,
+                  status: "completed",
+                  response: content,
+                  progress: 100,
+                });
+              }
+
+              dispatched = true;
+              break;
+            }
+          } else {
+            const errText = await response.text().catch(() => response.statusText);
+            errors.push(`${baseUrl}: ${response.status} ${errText}`);
+          }
+        } catch (err: any) {
+          errors.push(`${baseUrl}: ${err.message || String(err)}`);
+        }
       }
-    } catch (err) {
-      console.error(`[SCHEDULED] Error executing task ${args.id}:`, err);
+
+      if (!dispatched) {
+        throw new Error(`Failed to dispatch to any OpenClaw URL: ${errors.join(", ")}`);
+      }
+
+    } catch (err: any) {
+      console.error(`[SCHEDULED] Error executing task ${id}:`, err);
+      
+      // Mark as failed in Convex
+      await ctx.runMutation(api.tasks.updateAIProgress, {
+        id,
+        aiStatus: "failed",
+        aiProgress: 0,
+        aiResponseShort: err.message || "Execution failed",
+      }).catch(() => {});
+
     } finally {
-      // Clear the scheduledTaskId regardless of success
-      await ctx.runMutation(internal.tasks.clearScheduledTask, { id: args.id });
+      // Clear the scheduledTaskId
+      await ctx.runMutation(internal.tasks.clearScheduledTask, { id });
     }
   },
 });
