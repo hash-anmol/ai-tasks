@@ -441,7 +441,7 @@ export default function KanbanBoard() {
                           <span className="material-symbols-outlined text-red-400 text-[14px]">lock</span>
                         )}
                         {task.heartbeatAgentId && (
-                          <span className="material-icons text-cyan-500/60 text-[12px]" title={`Heartbeat: ${task.heartbeatAgentId}`}>schedule</span>
+                          <span className="material-icons text-cyan-500/60 text-[12px]" title={`Scheduled: ${task.heartbeatAgentId}`}>schedule</span>
                         )}
                         {task.agent && (
                           <span className="text-sm opacity-80" title={getAgentInfo(task.agent)?.name}>

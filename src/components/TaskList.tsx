@@ -173,6 +173,7 @@ export default function TaskList({ agentFilter = "all", activeTab: activeTabProp
   const updateAIProgress = useMutation(api.tasks.updateAIProgress);
   const deleteTask = useMutation(api.tasks.deleteTask);
   const [retryingTasks, setRetryingTasks] = useState<Set<string>>(new Set());
+  const [optimisticUpdates, setOptimisticUpdates] = useState<Map<string, string>>(new Map());
 
   const handleRetryTask = async (task: Task) => {
     if (retryingTasks.has(task._id)) return;
@@ -202,9 +203,18 @@ export default function TaskList({ agentFilter = "all", activeTab: activeTabProp
     }
   };
 
+  // Merge optimistic updates with query results
+  const mergedTaskList = taskList.map((task: Task) => {
+    const optimisticStatus = optimisticUpdates.get(task._id);
+    if (optimisticStatus) {
+      return { ...task, status: optimisticStatus };
+    }
+    return task;
+  });
+
   // Build subtask lookup: parentId -> subtasks[]
   const subtasksByParent = new Map<string, Task[]>();
-  (taskList as Task[]).forEach((t) => {
+  (mergedTaskList as Task[]).forEach((t) => {
     if (t.isSubtask && t.parentTaskId) {
       const existing = subtasksByParent.get(t.parentTaskId) || [];
       existing.push(t);
@@ -214,7 +224,7 @@ export default function TaskList({ agentFilter = "all", activeTab: activeTabProp
 
   const getFilteredTasks = () => {
     // Only show top-level tasks in the main list (subtasks render under their parents)
-    let filtered = (taskList as Task[]).filter((t) => !t.isSubtask);
+    let filtered = (mergedTaskList as Task[]).filter((t) => !t.isSubtask);
     
     if (agentFilter && agentFilter !== "all") {
       filtered = filtered.filter((t: Task) => t.agent === agentFilter);
@@ -235,10 +245,20 @@ export default function TaskList({ agentFilter = "all", activeTab: activeTabProp
 
   const handleToggleStatus = async (task: Task) => {
     const newStatus = task.status === "done" ? "inbox" : "done";
+    
+    // Optimistic update - immediately update the UI
+    setOptimisticUpdates(prev => new Map(prev).set(task._id, newStatus));
+    
     try {
       await updateTaskStatus({ id: task._id as any, status: newStatus } as any);
     } catch (error) {
       console.error("Error updating task:", error);
+      // Rollback optimistic update on error
+      setOptimisticUpdates(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(task._id);
+        return newMap;
+      });
     }
   };
 
@@ -252,16 +272,23 @@ export default function TaskList({ agentFilter = "all", activeTab: activeTabProp
     }
   };
 
-  const filteredTasks = getFilteredTasks() as Task[];
-  const isDependencyBlocked = (task: Task) => getDependencyBlockers(task, taskList as Task[]).length > 0;
+  const filteredTasks = (getFilteredTasks() as Task[]).slice().sort((a, b) => {
+    const aTime = a.updatedAt ?? a.createdAt;
+    const bTime = b.updatedAt ?? b.createdAt;
+    return bTime - aTime;
+  });
+  const isDependencyBlocked = (task: Task) => getDependencyBlockers(task, mergedTaskList as Task[]).length > 0;
   const activeList = (filteredTasks as Task[]).filter(
     t => (!t.isAI || t.aiStatus !== "blocked") && !isDependencyBlocked(t)
   );
   const pendingTasks = activeList.filter(
-    t => t.status === "inbox" && areDependenciesMet(t, taskList as Task[])
+    t => t.status === "inbox" && areDependenciesMet(t, mergedTaskList as Task[])
   );
   const inProgressTasks = activeList.filter(
     t => t.status === "in_progress" || t.status === "assigned"
+  );
+  const reviewTasks = activeList.filter(
+    t => t.status === "review"
   );
   const doneTasks = activeList.filter(t => t.status === "done");
   const blockedTasks = filteredTasks.filter(
@@ -295,11 +322,24 @@ export default function TaskList({ agentFilter = "all", activeTab: activeTabProp
         onDelete={handleDelete}
         onRetry={handleRetryTask}
         retryingTasks={retryingTasks}
-        allTasks={taskList as Task[]}
+        allTasks={mergedTaskList as Task[]}
         {...props}
       />
     );
   };
+
+  if (activeTab === "archive") {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h2 className="font-display text-2xl font-light mb-6 text-[var(--text-primary)] opacity-60">Archive</h2>
+          <div>
+            {filteredTasks.map((task) => renderTaskWithSubtasks(task))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -313,6 +353,16 @@ export default function TaskList({ agentFilter = "all", activeTab: activeTabProp
         </div>
       )}
 
+      {/* Review section */}
+      {reviewTasks.length > 0 && (
+        <div>
+          <h2 className="font-display text-2xl font-light mb-6 text-[var(--text-primary)] opacity-80">Review</h2>
+          <div>
+            {reviewTasks.map((task) => renderTaskWithSubtasks(task))}
+          </div>
+        </div>
+      )}
+
       {/* Blocked section */}
       {blockedTasks.length > 0 && (
         <div>
@@ -321,7 +371,7 @@ export default function TaskList({ agentFilter = "all", activeTab: activeTabProp
             {blockedTasks.map((task) => renderTaskWithSubtasks(task, {
               isBlocked: true,
               blockedLabel: isDependencyBlocked(task) ? "Waiting" : "Blocked",
-              dependencyBlockers: getDependencyBlockers(task, taskList as Task[]),
+              dependencyBlockers: getDependencyBlockers(task, mergedTaskList as Task[]),
             }))}
           </div>
         </div>
@@ -332,7 +382,7 @@ export default function TaskList({ agentFilter = "all", activeTab: activeTabProp
         <div>
           <h2 className="font-display text-2xl font-light mb-6 text-[var(--text-primary)] opacity-30">Done</h2>
           <div>
-            {doneTasks.slice(0, 5).map((task) => renderTaskWithSubtasks(task))}
+            {doneTasks.map((task) => renderTaskWithSubtasks(task))}
           </div>
         </div>
       )}
@@ -537,7 +587,7 @@ function TaskCard({ task, onToggle, onDelete, onRetry, retryingTasks = new Set()
           {task.heartbeatAgentId && (
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20 flex items-center gap-0.5">
               <span className="material-icons text-[10px]">schedule</span>
-              {getAgentInfo(task.heartbeatAgentId)?.emoji} Heartbeat
+              {getAgentInfo(task.heartbeatAgentId)?.emoji} Scheduled
             </span>
           )}
 

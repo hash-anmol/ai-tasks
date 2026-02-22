@@ -142,7 +142,7 @@ export default function AddTaskButton() {
         });
       }
 
-      // Scheduled tasks run via heartbeat
+      // Scheduled tasks run via backend scheduler
 
       return;
     } catch (err) {

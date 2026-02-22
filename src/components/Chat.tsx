@@ -53,7 +53,7 @@ When the user asks you to create a task, add a todo, or anything that implies cr
 
 ## Multi-Agent Delegation
 
-For complex tasks that need multiple steps, you can break them into subtasks and assign them to specialist agents. Each agent picks up tasks automatically via heartbeat polling.
+For complex tasks that need multiple steps, you can break them into subtasks and assign them to specialist agents. Specialist agents pick up assigned tasks automatically according to the schedule.
 
 **Available agents:**
 - "researcher" — finds information, does web research, gathers data
@@ -82,10 +82,10 @@ First create the parent task, then create subtasks referencing it:
 [/CREATE_SUBTASK]
 
 **Subtask rules:**
-- "heartbeatAgentId" (required for subtasks) — which agent picks this up via heartbeat
+- "heartbeatAgentId" (required for subtasks) — which agent is scheduled to pick this up
 - "subtaskMode" on parent: "serial" (subtasks depend on each other) or "parallel" (all run at once)
 - "dependsOn" — title of the task this depends on (resolved to ID by the system)
-- Agents automatically pick up tasks on their next heartbeat (every 15 min)
+- Specialist agents check for and pick up assigned tasks every few minutes
 - Dependencies are checked server-side — agents only see tasks whose deps are all completed
 
 ## Field Reference
@@ -95,7 +95,7 @@ First create the parent task, then create subtasks referencing it:
 - "priority" — "low" | "medium" | "high" (defaults to "medium")
 - "agent" — "researcher" | "writer" | "editor" | "coordinator" (optional, makes it an AI task)
 - "tags" — optional array of strings
-- "heartbeatAgentId" — which agent picks this up (for delegated subtasks)
+- "heartbeatAgentId" — which agent is scheduled to pick this up (for delegated subtasks)
 - "subtaskMode" — "parallel" | "serial" (on parent task)
 
 You can create multiple tasks/subtasks by including multiple blocks.
@@ -271,8 +271,30 @@ function ThinkingBlock({ thinking, isStreaming }: { thinking: ThinkingData; isSt
   );
 }
 
-export default function Chat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+  createdTasks?: { title: string; agent?: string }[];
+  thinking?: ThinkingData;
+  pending?: boolean;
+}
+
+interface ChatProps {
+  messages?: ChatMessage[];
+  setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  isOnline?: boolean;
+}
+
+export default function Chat({ messages: externalMessages, setMessages: setExternalMessages, isOnline: externalIsOnline }: ChatProps) {
+  const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([]);
+  const messages = externalMessages ?? internalMessages;
+  const setMessages = setExternalMessages ?? setInternalMessages;
+  
+  const [isOnlineState, setIsOnlineState] = useState(true);
+  const isOnline = externalIsOnline ?? isOnlineState;
+  
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -317,6 +339,20 @@ export default function Chat() {
       .then((data) => setConnected(data.connected ?? false))
       .catch(() => setConnected(false));
   }, []);
+
+  // Process pending messages when network comes back
+  useEffect(() => {
+    if (isOnline && messages.some((m) => m.pending)) {
+      const pendingMsg = messages.find((m) => m.pending && m.role === "user");
+      if (pendingMsg) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === pendingMsg.id ? { ...m, pending: false } : m))
+        );
+        const nonPendingMessages = messages.filter((m) => !m.pending || m.id !== pendingMsg.id);
+        processMessage(pendingMsg.content, nonPendingMessages);
+      }
+    }
+  }, [isOnline]);
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -785,10 +821,16 @@ export default function Chat() {
       role: "user",
       content: trimmed,
       timestamp: Date.now(),
+      pending: !isOnline,
     };
 
     const updatedMessages = [...messages, userMsg];
     setMessages(updatedMessages);
+
+    if (!isOnline) {
+      setIsLoading(true);
+      return;
+    }
 
     await processMessage(trimmed, updatedMessages);
   };
@@ -973,9 +1015,17 @@ export default function Chat() {
               )}
 
               {msg.role === "user" ? (
-                <pre className="text-[13px] font-body whitespace-pre-wrap leading-relaxed font-light">
-                  {msg.content}
-                </pre>
+                <div className="flex items-center gap-2">
+                  <pre className="text-[13px] font-body whitespace-pre-wrap leading-relaxed font-light">
+                    {msg.content}
+                  </pre>
+                  {msg.pending && (
+                    <span className="text-[10px] text-amber-500 animate-pulse flex items-center gap-1">
+                      <span className="material-icons text-[12px]">hourglass_empty</span>
+                      waiting
+                    </span>
+                  )}
+                </div>
               ) : (
                 <MarkdownResponse content={msg.content} />
               )}
