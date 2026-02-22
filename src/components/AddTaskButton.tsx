@@ -45,6 +45,7 @@ export default function AddTaskButton() {
   const [selectedSessionId, setSelectedSessionId] = useState<string>("new");
   const [dependsOn, setDependsOn] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   
   // OpenClaw sessions
   const [sessions, setSessions] = useState<GatewaySessionRow[]>([]);
@@ -120,6 +121,7 @@ export default function AddTaskButton() {
       setAgent(undefined);
       setSelectedSessionId("new");
       setDependsOn([]);
+      setIsDescriptionExpanded(false);
       setIsOpen(false);
       setIsSubmitting(false);
 
@@ -189,8 +191,8 @@ export default function AddTaskButton() {
       {isOpen && (
         <div 
           className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[60] flex items-end sm:items-center justify-center"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setIsOpen(false); }}
-          onTouchStart={(e) => { if (e.target === e.currentTarget) setIsOpen(false); }}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) { setIsOpen(false); setIsDescriptionExpanded(false); } }}
+          onTouchStart={(e) => { if (e.target === e.currentTarget) { setIsOpen(false); setIsDescriptionExpanded(false); } }}
         >
           <div 
             className="bg-[var(--surface)] w-full sm:max-w-lg max-h-[85vh] rounded-t-3xl sm:rounded-2xl p-6 overflow-y-auto border-x border-t sm:border border-[var(--border)] shadow-2xl"
@@ -198,7 +200,7 @@ export default function AddTaskButton() {
             <div className="flex items-center justify-between mb-8">
               <h2 className="font-display text-2xl font-light text-[var(--text-primary)]">New Task</h2>
               <button 
-                onClick={() => setIsOpen(false)}
+                onClick={() => { setIsOpen(false); setIsDescriptionExpanded(false); }}
                 className="w-9 h-9 rounded-full bg-[var(--background)] flex items-center justify-center hover:bg-[var(--border)] transition-colors border border-[var(--border)]"
               >
                 <span className="material-icons text-base text-[var(--text-secondary)]">close</span>
@@ -217,14 +219,33 @@ export default function AddTaskButton() {
                 />
               </div>
 
-              <div>
-                <textarea
-                  placeholder="Add details..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-0 py-2 border-0 border-b border-[var(--border)] focus:border-blue-500 focus:outline-none focus:ring-0 resize-none text-[15px] font-light text-[var(--text-primary)] opacity-80 placeholder:text-[var(--text-secondary)]/40 bg-transparent transition-colors"
-                  rows={2}
-                />
+              <div className={`relative group/desc transition-all duration-300 ${isDescriptionExpanded ? "mb-2" : ""}`}>
+                <div className={`flex flex-col transition-all duration-300 ${isDescriptionExpanded ? "bg-[var(--background)]/50 rounded-xl p-3 border border-[var(--border)] shadow-inner" : ""}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    {isDescriptionExpanded && (
+                      <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Description</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                      className={`ml-auto p-1.5 rounded-lg hover:bg-[var(--border)] transition-colors ${isDescriptionExpanded ? "text-blue-500 bg-blue-500/10" : "text-[var(--text-secondary)] opacity-40 group-hover/desc:opacity-100"}`}
+                      title={isDescriptionExpanded ? "Collapse view" : "Expand view"}
+                    >
+                      <span className="material-icons text-base">
+                        {isDescriptionExpanded ? "unfold_less" : "unfold_more"}
+                      </span>
+                    </button>
+                  </div>
+                  <textarea
+                    placeholder="Add details..."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className={`w-full px-0 py-2 border-0 focus:outline-none focus:ring-0 text-[15px] font-light text-[var(--text-primary)] opacity-80 placeholder:text-[var(--text-secondary)]/40 bg-transparent transition-all duration-300 ${
+                      !isDescriptionExpanded ? "border-b border-[var(--border)] focus:border-blue-500 resize-none" : "min-h-[120px] resize-y"
+                    }`}
+                    rows={isDescriptionExpanded ? 6 : 2}
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-6">
