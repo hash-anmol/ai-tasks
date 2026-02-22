@@ -37,7 +37,7 @@ function getOpenClawUrls() {
       normalized.push(trimmed);
     }
   }
-  return normalized.length > 0 ? normalized : ["http://127.0.0.1:18789"];
+  return normalized;
 }
 
 function getOpenClawAuth(baseUrl: string) {
@@ -365,8 +365,21 @@ export const executeScheduledTask = internalAction({
       let dispatched = false;
       const errors: string[] = [];
 
+      if (openClawUrls.length === 0) {
+        throw new Error("No OpenClaw URL configured. Please set OPENCLAW_URL in your Convex Dashboard.");
+      }
+
       for (const url of openClawUrls) {
         const { baseUrl, header } = getOpenClawAuth(url);
+        
+        // Check for localhost/127.0.0.1 which won't work from Convex cloud
+        if (baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1")) {
+          const errorMsg = `Invalid OpenClaw URL: ${baseUrl}. Convex cannot connect to your local machine (localhost). Please use a public URL or a tunnel (like ngrok or Cloudflare) and set it in your Convex Dashboard as OPENCLAW_URL.`;
+          console.error(`[SCHEDULED] ${errorMsg}`);
+          errors.push(errorMsg);
+          continue;
+        }
+
         console.log(`[SCHEDULED] Trying OpenClaw at ${baseUrl}`);
 
         try {
@@ -435,7 +448,8 @@ export const executeScheduledTask = internalAction({
       }
 
       if (!dispatched) {
-        throw new Error(`Failed to dispatch to any OpenClaw URL: ${errors.join(", ")}`);
+        const lastReason = errors.length > 0 ? errors[errors.length - 1] : "OpenClaw unreachable";
+        throw new Error(lastReason);
       }
 
     } catch (err: any) {
