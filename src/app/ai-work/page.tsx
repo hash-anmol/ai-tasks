@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, Suspense, useEffect, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import AppFooter from "@/components/AppFooter";
 import MarkdownResponse from "@/components/MarkdownResponse";
@@ -66,6 +66,7 @@ const getRelativeTime = (timestamp: number): string => {
 
 function AIWorkContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const focusedTaskId = searchParams.get("task");
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
@@ -403,10 +404,10 @@ function AIWorkContent() {
     return (
       <div className="h-screen overflow-hidden relative flex flex-col bg-[var(--background)]">
         <header className="pt-14 pb-4 px-6 bg-[var(--background)]/80 backdrop-blur-sm z-10 border-b border-[var(--border)]">
-          <Link href="/ai-work" className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-light flex items-center gap-1 mb-3">
+          <button onClick={() => router.back()} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-light flex items-center gap-1 mb-3">
             <span className="material-icons text-[16px]">arrow_back</span>
             Back
-          </Link>
+          </button>
           <h1 className="font-display text-xl font-light text-[var(--text-primary)] mb-1">{focusedTask.title}</h1>
           <div className="flex items-center gap-3">
             {agentInfo && (
@@ -595,10 +596,10 @@ function AIWorkContent() {
   return (
     <div className="h-screen overflow-hidden relative flex flex-col bg-[var(--background)]">
       <header className="pt-14 pb-4 px-6 bg-[var(--background)]/80 backdrop-blur-sm z-10 border-b border-[var(--border)]">
-        <Link href="/" className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-light flex items-center gap-1 mb-3">
+        <button onClick={() => router.back()} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-sm font-light flex items-center gap-1 mb-3">
           <span className="material-icons text-[16px]">arrow_back</span>
-          Tasks
-        </Link>
+          Back
+        </button>
         <h1 className="font-display text-2xl font-light text-[var(--text-primary)] mb-5">AI Work</h1>
         
         {/* Agent filter pills */}

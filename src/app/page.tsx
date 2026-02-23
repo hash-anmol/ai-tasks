@@ -10,6 +10,7 @@ import AppFooter from "@/components/AppFooter";
 import VoiceMode from "@/components/VoiceMode";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useNetwork } from "@/hooks/useNetwork";
 
 type MainTab = "chat" | "tasks";
 type SubTab = "all" | "ai" | "archive";
@@ -110,6 +111,30 @@ function PageContent() {
   const searchParams = useSearchParams();
   const [view, setView] = useState("list");
   const [voiceModeOpen, setVoiceModeOpen] = useState(false);
+  const { isOnline } = useNetwork();
+  
+  interface ToolCallInfo {
+    id: string;
+    name: string;
+    arguments: string;
+  }
+
+  interface ThinkingData {
+    thinkingText: string;
+    toolCalls: ToolCallInfo[];
+  }
+
+  interface ChatMessage {
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    timestamp: number;
+    createdTasks?: { title: string; agent?: string }[];
+    thinking?: ThinkingData;
+    pending?: boolean;
+  }
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   
   // Derive initial tab from URL params
   const tabParam = searchParams.get("tab");
@@ -170,7 +195,7 @@ function PageContent() {
       <main className={`flex-1 overflow-y-auto hide-scrollbar px-6 pb-32 pt-4 ${
         mainTab === "chat" ? "flex flex-col" : ""
       }`}>
-        {mainTab === "chat" && <Chat />}
+        {mainTab === "chat" && <Chat messages={messages} setMessages={setMessages} isOnline={isOnline} />}
         {mainTab === "tasks" && (
           view === "kanban" ? (
             <KanbanBoard />
